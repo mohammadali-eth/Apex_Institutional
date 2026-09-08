@@ -1,0 +1,55 @@
+{
+  "app": {
+    "name": "Apex QPMS",
+    "fullName": "University Question Paper Management & Generation System",
+    "institution": "Apex Institute of Technology & Science"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "academic": "Academic Structure",
+    "materials": "Materials & Syllabus",
+    "questions": "Question Bank",
+    "createQuestion": "Create Question",
+    "generator": "Paper Generator",
+    "history": "Paper History",
+    "approvals": "Paper Approvals",
+    "reports": "Audit Reports",
+    "settings": "Settings"
+  },
+  "auth": {
+    "signIn": "Sign In",
+    "signOut": "Sign Out",
+    "selectDepartment": "Select Department Context",
+    "noDepartment": "No Department Assigned",
+    "noDeptDesc": "You are authenticated, but no academic department has been assigned to your profile yet. Please contact your institution administrator.",
+    "selectDeptDesc": "You hold appointments across multiple academic faculties. Select your active working department:",
+    "enterDashboard": "Enter Faculty Dashboard",
+    "switchUser": "Quick Switch Demo Persona"
+  },
+  "actions": {
+    "save": "Save Changes",
+    "saveDraft": "Save as Draft",
+    "submit": "Submit for Review",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "view": "View Details",
+    "duplicate": "Duplicate as Draft",
+    "archive": "Archive",
+    "approve": "Approve",
+    "reject": "Reject",
+    "generate": "Generate Question Paper",
+    "useReference": "Use as Reference",
+    "viewPaper": "View Paper",
+    "continue": "Continue",
+    "back": "Back"
+  },
+  "status": {
+    "draft": "Draft",
+    "submitted": "Submitted",
+    "under_review": "Under Review",
+    "approved": "Approved",
+    "rejected": "Rejected",
+    "archived": "Archived"
+  }
+}

@@ -1,0 +1,80 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --primary-color: #82c341;
+  --secondary-color: #45525b;
+  --background-color: #f3f3f3;
+  --font-color: #838383;
+  --title-color: #44535b;
+  --paragraph-color: #676767;
+  --bg-text-color: #dcdcdc;
+  --bg-title-color: #f6f6f7;
+  --white-color: #ffffff;
+  --black-color: #000000;
+  --footer-bg: #eeeeee;
+}
+
+@layer base {
+  body {
+    background-color: var(--background-color);
+    color: var(--paragraph-color);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    selection-background-color: var(--primary-color);
+    selection-color: var(--white-color);
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    color: var(--title-color);
+    font-weight: 700;
+  }
+
+  /* Form Elements - Strictly Match Brand Color Stack */
+  input[type="checkbox"],
+  input[type="radio"] {
+    accent-color: var(--primary-color) !important;
+    cursor: pointer;
+  }
+
+  input[type="range"] {
+    accent-color: var(--primary-color) !important;
+  }
+
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: 2px solid var(--primary-color) !important;
+    outline-offset: 1px;
+  }
+}
+
+/* RTL Direction styling */
+[dir="rtl"] {
+  text-align: right;
+  direction: rtl;
+}
+
+[dir="rtl"] .ltr-only {
+  direction: ltr;
+  text-align: left;
+}
+
+/* Examination Paper Print Watermark */
+.paper-preview-watermark {
+  position: relative;
+}
+.paper-preview-watermark::before {
+  content: "EXAMINATION COPY";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-30deg);
+  font-size: 4.5rem;
+  font-weight: 800;
+  color: rgba(68, 83, 91, 0.03);
+  pointer-events: none;
+  white-space: nowrap;
+  user-select: none;
+  z-index: 0;
+}
