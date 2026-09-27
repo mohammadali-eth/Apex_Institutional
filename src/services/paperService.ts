@@ -1,5 +1,8 @@
-import { PreviousPaper, PreviousPaperQuery, User } from '../types';
+import { PreviousPaper, PreviousPaperQuery, User, PaperStatus } from '../types';
 import { initialPreviousPapers } from '../mock/previousPaperData';
+import { updateDemoState } from '../store/demoState';
+import { permissionService } from '../lib/permissions/permissionService';
+import { auditService } from './auditService';
 
 const STORAGE_KEY = 'qpms_papers_v1';
 
@@ -32,7 +35,21 @@ const listeners: Array<() => void> = [];
 
 function notifyListeners() {
   saveStoredPapers(paperStore);
+  updateDemoState(state => ({ ...state, papers: paperStore }));
   listeners.forEach(fn => fn());
+}
+
+const legacyStatus: Record<PaperStatus, PreviousPaper['status']> = {
+  DRAFT: 'draft', SUBMITTED: 'submitted', UNDER_REVIEW: 'under_review', CHANGES_REQUESTED: 'rejected',
+  QUALITY_REVIEW: 'under_review', QUALITY_APPROVED: 'approved', PENDING_FINAL_APPROVAL: 'approved',
+  APPROVED: 'approved', FINALIZED: 'approved', PUBLISHED: 'approved', ARCHIVED: 'archived',
+};
+const normalizePaper = (paper: PreviousPaper): PreviousPaper => ({ ...paper, workflowStatus: paper.workflowStatus || ({ draft: 'DRAFT', submitted: 'SUBMITTED', under_review: 'UNDER_REVIEW', approved: 'APPROVED', rejected: 'CHANGES_REQUESTED', archived: 'ARCHIVED' } as const)[paper.status] || 'DRAFT', version: paper.version || 1 });
+paperStore = paperStore.map(normalizePaper);
+
+function appendEvent(paper: PreviousPaper, status: PaperStatus, user: User, comment?: string) {
+  const at = new Date().toISOString();
+  return { ...paper, workflowStatus: status, status: legacyStatus[status], updatedAt: at, timeline: [...(paper.timeline || []), { status, actor: user.name, at, comment }] };
 }
 
 /**
@@ -146,6 +163,61 @@ export const paperService = {
 
   getPaperById(id: string): PreviousPaper | undefined {
     return paperStore.find(p => p.id === id);
+  },
+
+  createWorkflowPaper(paper: PreviousPaper, user: User) {
+    if (!permissionService.hasPermission(user, 'paper.create') || !permissionService.canAccessResource(user, { departmentId: paper.departmentId, subjectId: paper.subjectId, examId: paper.examId })) return undefined;
+    const created = appendEvent({ ...paper, createdBy: user.name, version: 1, title: paper.title || `${paper.subjectName} Examination`, history: [{ version: 1, changedBy: user.name, changedAt: new Date().toISOString(), summary: 'Initial paper draft' }] }, 'DRAFT', user);
+    paperStore.unshift(created); notifyListeners(); this.recordAudit(`Created paper ${created.id}`, user); return created;
+  },
+
+  transitionPaper(id: string, next: PaperStatus, user: User, comment?: string, confirmed = false) {
+    const paper = paperStore.find(item => item.id === id);
+    if (!paper || !permissionService.canAccessResource(user, { departmentId: paper.departmentId, subjectId: paper.subjectId, examId: paper.examId })) return undefined;
+    const current = paper.workflowStatus || 'DRAFT';
+    if (next === 'SUBMITTED' && current !== 'DRAFT' && current !== 'CHANGES_REQUESTED') return undefined;
+    if (next === 'UNDER_REVIEW' && current !== 'SUBMITTED' || next === 'CHANGES_REQUESTED' && !['UNDER_REVIEW', 'QUALITY_REVIEW', 'PENDING_FINAL_APPROVAL'].includes(current)) return undefined;
+    if (next === 'QUALITY_REVIEW' && current !== 'UNDER_REVIEW' || next === 'QUALITY_APPROVED' && current !== 'QUALITY_REVIEW') return undefined;
+    if (next === 'PENDING_FINAL_APPROVAL' && current !== 'QUALITY_APPROVED' || next === 'APPROVED' && current !== 'PENDING_FINAL_APPROVAL') return undefined;
+    if (next === 'FINALIZED' && (current !== 'APPROVED' || !confirmed) || next === 'PUBLISHED' && (current !== 'FINALIZED' || !confirmed)) return undefined;
+    if (next === 'ARCHIVED' && !['DRAFT', 'PUBLISHED'].includes(current)) return undefined;
+    if (next === 'SUBMITTED') {
+      const chosen = (paper.sections || []).flatMap(section => section.questions);
+      const marks = chosen.reduce((total, question) => total + question.marks, 0);
+      if (!paper.examId || !paper.subjectId || !(paper.sections || []).length || !chosen.length || marks !== paper.totalMarks) return undefined;
+    }
+    if (['APPROVED','FINALIZED','PUBLISHED'].includes(next) && !confirmed) return undefined;
+    if (['QUALITY_APPROVED', 'PENDING_FINAL_APPROVAL'].includes(next) && user.role !== 'quality_controller' && !['super_admin', 'institution_admin', 'university_admin'].includes(user.role)) return undefined;
+    if (['APPROVED', 'FINALIZED'].includes(next) && user.role !== 'exam_controller' && !['super_admin', 'institution_admin', 'university_admin'].includes(user.role)) return undefined;
+    const required: Record<string, Parameters<typeof permissionService.hasPermission>[1]> = {
+      SUBMITTED: 'paper.submit', UNDER_REVIEW: 'paper.review', CHANGES_REQUESTED: 'paper.review', QUALITY_REVIEW: 'paper.review', QUALITY_APPROVED: 'paper.approve', PENDING_FINAL_APPROVAL: 'paper.approve', APPROVED: 'paper.finalize', FINALIZED: 'paper.finalize', PUBLISHED: 'paper.publish', ARCHIVED: 'paper.update',
+    };
+    if (required[next] && !permissionService.hasPermission(user, required[next])) return undefined;
+    if (next === 'CHANGES_REQUESTED' && !comment?.trim()) return undefined;
+    const updated = appendEvent(paper, next, user, comment);
+    if (next === 'SUBMITTED') updated.submittedBy = user.name;
+    if (next === 'CHANGES_REQUESTED') updated.reviewComments = [...(paper.reviewComments || []), comment!.trim()];
+    if (next === 'UNDER_REVIEW') updated.reviewerId = user.id;
+    if (next === 'QUALITY_REVIEW') updated.qualityControllerId = user.id;
+    if (next === 'FINALIZED' || next === 'APPROVED') updated.examControllerId = user.id;
+    paperStore = paperStore.map(item => item.id === id ? updated : item);
+    notifyListeners(); this.recordAudit(`${next.replace(/_/g, ' ')} paper ${id}`, user);
+    const notice = ({ SUBMITTED: 'Paper submitted', CHANGES_REQUESTED: 'Changes requested', APPROVED: 'Paper approved', QUALITY_APPROVED: 'Quality approved', PENDING_FINAL_APPROVAL: 'Final approval requested', FINALIZED: 'Paper finalized', PUBLISHED: 'Paper published' } as Partial<Record<PaperStatus, string>>)[next];
+    if (notice) updateDemoState(state => ({ ...state, notifications: [{ id: `notif-${Date.now()}`, title: notice, message: `${updated.title || updated.subjectName} (${id}) is now ${next.replace(/_/g, ' ').toLowerCase()}.`, read: false }, ...state.notifications] }));
+    return updated;
+  },
+
+  updateWorkflowPaper(id: string, changes: Partial<PreviousPaper>, user: User) {
+    const paper = paperStore.find(item => item.id === id);
+    if (!paper || !['DRAFT', 'CHANGES_REQUESTED'].includes(paper.workflowStatus || 'DRAFT') || (!permissionService.hasPermission(user, 'system.manage') && paper.createdBy !== user.name) || !permissionService.hasPermission(user, 'paper.update') || !permissionService.canAccessResource(user, { departmentId: paper.departmentId, subjectId: paper.subjectId })) return undefined;
+    const version = (paper.version || 1) + 1;
+    const updated = { ...paper, ...changes, workflowStatus: 'DRAFT' as PaperStatus, status: 'draft' as const, version, updatedAt: new Date().toISOString(), history: [...(paper.history || []), { version, changedBy: user.name, changedAt: new Date().toISOString(), summary: 'Updated paper content' }] };
+    paperStore = paperStore.map(item => item.id === id ? updated : item); notifyListeners(); this.recordAudit(`Updated paper ${id} v${version}`, user); return updated;
+  },
+
+  recordAudit(action: string, user: User) {
+    const eventAction = action.startsWith('Created paper') ? 'PAPER_CREATED' : action.startsWith('Updated paper') ? 'PAPER_UPDATED' : action.startsWith('SUBMITTED paper') ? 'PAPER_SUBMITTED' : action.startsWith('UNDER_REVIEW paper') ? 'PAPER_REVIEWED' : action.startsWith('CHANGES_REQUESTED paper') ? 'PAPER_CHANGES_REQUESTED' : action.startsWith('QUALITY_APPROVED paper') ? 'PAPER_QUALITY_APPROVED' : action.startsWith('APPROVED paper') ? 'PAPER_APPROVED' : action.startsWith('FINALIZED paper') ? 'PAPER_FINALIZED' : action.startsWith('PUBLISHED paper') ? 'PAPER_PUBLISHED' : action;
+    auditService.record({ action:eventAction, user, resource: 'paper', resourceId: action.match(/QP[^ ]*/)?.[0], description: action, severity: /FINALIZED|PUBLISHED/.test(action) ? 'CRITICAL' : 'INFO' });
   },
 
   duplicatePaperAsNewDraft(paperId: string, user: User): PreviousPaper | undefined {

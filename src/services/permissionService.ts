@@ -1,4 +1,5 @@
 import { User, Question } from '../types';
+import { permissionService } from '../lib/permissions/permissionService';
 
 export interface PermissionCheckResult {
   allowed: boolean;
@@ -14,8 +15,7 @@ export interface PermissionCheckResult {
  * - Approved questions trigger versioning workflow (Requirement #5).
  */
 export function canUserEditQuestion(user: User, question: Question): PermissionCheckResult {
-  // 1. Department isolation check
-  if (user.departmentId !== question.departmentId) {
+  if (!permissionService.hasAnyPermission(user, ['question.update', 'question.create']) || !permissionService.canAccessResource(user, { departmentId: question.departmentId, subjectId: question.subjectId })) {
     return {
       allowed: false,
       reason: `Unauthorized: Question belongs to ${question.departmentId === 'dept-cs' ? 'Computer Science' : 'Electrical Engineering'} department. You are in ${user.departmentName}.`,
@@ -42,7 +42,7 @@ export function canUserEditQuestion(user: User, question: Question): PermissionC
   // 4. Submitted question (under review)
   if (question.status === 'Submitted') {
     // HOD or author can retract/edit
-    if (user.role === 'hod' || question.createdBy === user.name) {
+    if (user.role === 'department_admin' || question.createdBy === user.name) {
       return {
         allowed: true,
         reason: 'Editing a submitted question will return it to Draft status.',
@@ -61,6 +61,5 @@ export function canUserEditQuestion(user: User, question: Question): PermissionC
 }
 
 export function canUserReviewQuestion(user: User, question: Question): boolean {
-  if (user.departmentId && user.departmentId !== question.departmentId) return false;
-  return user.role === 'hod' || user.role === 'coordinator' || user.role === 'institution_admin' || user.role === 'university_admin';
+  return permissionService.hasPermission(user, 'question.approve') && permissionService.canAccessResource(user, { departmentId: question.departmentId, subjectId: question.subjectId });
 }

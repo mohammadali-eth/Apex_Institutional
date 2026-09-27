@@ -64,6 +64,7 @@ export const initialQuestions: Question[] = [
   },
   {
     id: 'Q-1025',
+    isPublic: true,
     subjectId: 'sub-ds',
     subjectName: 'Data Structures',
     unitId: 'unit-ds-3',

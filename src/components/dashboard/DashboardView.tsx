@@ -4,7 +4,9 @@ import { useDepartment } from '../../contexts/DepartmentContext';
 import { useI18n } from '../../lib/i18n';
 import { questionService } from '../../services/questionService';
 import { paperService } from '../../services/paperService';
-import { mockSubjects } from '../../mock/academicData';
+import { loadDemoState } from '../../store/demoState';
+import { permissionService } from '../../lib/permissions/permissionService';
+import { PermissionName } from '../../types';
 import {
   BookOpen,
   HelpCircle,
@@ -33,16 +35,37 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
   const deptId = currentDepartment?.id || 'dept-cs';
 
   // Department-scoped statistics
-  const deptQuestions = questionService.getQuestionsByDepartment(deptId);
+  const scopedQuestions = questionService.getAllQuestions().filter(question => {
+    if (!currentUser) return false;
+    if (currentUser.role === 'guest') return Boolean(question.isPublic);
+    if (currentUser.role === 'student' && question.status !== 'Approved') return false;
+    return permissionService.canAccessResource(currentUser, { departmentId: question.departmentId, subjectId: question.subjectId });
+  });
+  const deptQuestions = scopedQuestions.filter(question => question.departmentId === deptId);
   const totalQuestions = deptQuestions.length;
   const draftQuestions = deptQuestions.filter(q => q.status === 'Draft').length;
   const approvedQuestions = deptQuestions.filter(q => q.status === 'Approved').length;
 
-  const deptPapers = paperService.getAllPapers({ departmentId: deptId });
+  const deptPapers = currentUser?.role === 'guest' ? [] : paperService.getAllPapers({ departmentId: deptId }).filter(paper => permissionService.canAccessResource(currentUser || null, { departmentId: paper.departmentId, subjectId: paper.subjectId, examId: paper.examId }) && (currentUser?.role !== 'student' || (paper.workflowStatus === 'PUBLISHED' && (currentUser.subjectIds || []).includes(paper.subjectId))));
   const totalPapers = deptPapers.length;
-  const pendingPapers = deptPapers.filter(p => p.status === 'submitted' || p.status === 'under_review').length;
+  const pendingPapers = deptPapers.filter(p => ['SUBMITTED', 'UNDER_REVIEW', 'QUALITY_REVIEW', 'QUALITY_APPROVED', 'PENDING_FINAL_APPROVAL'].includes(p.workflowStatus || 'DRAFT')).length;
+  const paperCounts = ['DRAFT','SUBMITTED','UNDER_REVIEW','FINALIZED','PUBLISHED'].map(status => ({ status, count: deptPapers.filter(p => p.workflowStatus === status).length }));
 
-  const assignedSubjects = mockSubjects.filter(s => s.departmentId === deptId);
+  const assignedSubjects = loadDemoState().subjects.filter(subject => subject.departmentId === deptId && currentUser && permissionService.hasSubjectAccess(currentUser, subject.id));
+  const workspaceByRole: Record<string, { title: string; description: string; route: string; permission: string }> = {
+    super_admin: { title: 'System administration', description: 'Manage access, roles, and institution wide controls.', route: 'users', permission: 'user.view' },
+    university_admin: { title: 'University administration', description: 'Review users and academic operations across your university scope.', route: 'users', permission: 'user.view' },
+    institution_admin: { title: 'Institution administration', description: 'Manage institution users and scoped academic operations.', route: 'users', permission: 'user.view' },
+    department_admin: { title: 'Department leadership', description: 'Review department activity, assigned subjects, and academic approvals.', route: 'departments', permission: 'question.view' },
+    faculty: { title: 'Faculty workspace', description: 'Create questions and prepare examination papers for assigned subjects.', route: 'create-question', permission: 'question.create' },
+    question_bank_manager: { title: 'Question bank management', description: 'Review and organize questions in your permitted department scope.', route: 'questions', permission: 'question_bank.view' },
+    question_paper_reviewer: { title: 'Review workspace', description: 'Work through papers awaiting your review.', route: 'approvals', permission: 'paper.review' },
+    exam_coordinator: { title: 'Exam coordination', description: 'Track assigned examination schedules and paper progress.', route: 'examinations', permission: 'exam.view' },
+    exam_controller: { title: 'Examination control', description: 'Monitor scheduled examinations and controller assignments.', route: 'examinations', permission: 'exam.view' },
+    quality_controller: { title: 'Quality control', description: 'Review flagged questions and papers in the quality queue.', route: 'quality', permission: 'paper.review' },
+    viewer: { title: 'Read only workspace', description: 'Browse records available in your assigned scope.', route: 'history', permission: 'paper.view' },
+  };
+  const workspace = currentUser ? workspaceByRole[currentUser.role] : undefined;
 
   return (
     <div className="space-y-8">
@@ -66,6 +89,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
           <button
             type="button"
             onClick={() => onNavigate('generator')}
+            hidden={!currentUser || !permissionService.hasPermission(currentUser, 'paper.create')}
             className="inline-flex items-center space-x-2 px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-brand-primary hover:bg-brand-primary-hover shadow-md transition"
           >
             <Sparkles className="h-4 w-4" />
@@ -127,15 +151,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
         </div>
       </div>
 
+      <section aria-label="Paper lifecycle counts" className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        {paperCounts.map(item => <div key={item.status} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-[11px] font-bold uppercase text-slate-500">{item.status.replace(/_/g,' ')}</p><p className="mt-1 text-2xl font-bold text-slate-900">{item.count}</p></div>)}
+      </section>
+
       {/* Quick Actions Panel (Requirement #11) */}
       <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
         <h3 className="text-xs font-bold uppercase text-brand-font tracking-wider mb-4">
-          Quick Faculty Actions
+          {workspace ? `${workspace.title} · Quick Actions` : 'Quick Actions'}
         </h3>
+        {workspace && currentUser && permissionService.hasPermission(currentUser, workspace.permission as PermissionName) && <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-brand-primary/20 bg-brand-primary-light/30 p-4"><div><p className="text-sm font-bold text-brand-title">{workspace.title}</p><p className="mt-1 text-xs text-brand-paragraph">{workspace.description}</p></div><button type="button" onClick={() => onNavigate(workspace.route)} className="inline-flex items-center gap-2 rounded-lg bg-brand-primary px-3 py-2 text-xs font-bold text-white hover:bg-brand-primary-hover">Open workspace <ArrowRight className="h-3.5 w-3.5"/></button></div>}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           <button
             type="button"
             onClick={() => onNavigate('create-question')}
+            hidden={!currentUser || !permissionService.hasPermission(currentUser, 'question.create')}
             className="p-3.5 rounded-xl border border-slate-200 hover:border-brand-primary bg-slate-50 hover:bg-brand-primary-light transition flex flex-col items-center text-center group"
           >
             <Plus className="h-5 w-5 text-brand-primary mb-1.5" />
@@ -145,6 +175,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
           <button
             type="button"
             onClick={() => onNavigate('questions')}
+            hidden={!currentUser || (currentUser.role !== 'guest' && !permissionService.canViewQuestions(currentUser))}
             className="p-3.5 rounded-xl border border-slate-200 hover:border-brand-primary bg-slate-50 hover:bg-brand-primary-light transition flex flex-col items-center text-center group"
           >
             <HelpCircle className="h-5 w-5 text-brand-secondary mb-1.5" />
@@ -154,6 +185,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
           <button
             type="button"
             onClick={() => onNavigate('materials')}
+            hidden={!currentUser || !permissionService.hasPermission(currentUser, 'question.create')}
             className="p-3.5 rounded-xl border border-slate-200 hover:border-brand-primary bg-slate-50 hover:bg-brand-primary-light transition flex flex-col items-center text-center group"
           >
             <UploadCloud className="h-5 w-5 text-brand-primary mb-1.5" />
@@ -163,6 +195,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
           <button
             type="button"
             onClick={() => onNavigate('generator')}
+            hidden={!currentUser || !permissionService.hasPermission(currentUser, 'paper.create')}
             className="p-3.5 rounded-xl border border-slate-200 hover:border-brand-primary bg-slate-50 hover:bg-brand-primary-light transition flex flex-col items-center text-center group"
           >
             <Layers className="h-5 w-5 text-brand-secondary mb-1.5" />
@@ -172,6 +205,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
           <button
             type="button"
             onClick={() => onNavigate('history')}
+            hidden={!currentUser || !permissionService.hasPermission(currentUser, 'paper.view')}
             className="p-3.5 rounded-xl border border-slate-200 hover:border-brand-primary bg-slate-50 hover:bg-brand-primary-light transition flex flex-col items-center text-center group"
           >
             <Sparkles className="h-5 w-5 text-brand-primary mb-1.5" />
@@ -181,6 +215,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
           <button
             type="button"
             onClick={() => onNavigate('history')}
+            hidden={!currentUser || !permissionService.hasPermission(currentUser, 'paper.view')}
             className="p-3.5 rounded-xl border border-slate-200 hover:border-brand-primary bg-slate-50 hover:bg-brand-primary-light transition flex flex-col items-center text-center group"
           >
             <History className="h-5 w-5 text-brand-secondary mb-1.5" />
@@ -207,6 +242,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
                 <button
                   type="button"
                   onClick={() => onNavigate('generator')}
+                  hidden={!currentUser || !permissionService.hasPermission(currentUser, 'paper.create')}
                   className="text-xs font-semibold text-brand-primary hover:text-brand-primary-hover"
                 >
                   Generate →

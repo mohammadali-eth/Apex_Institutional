@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useToast } from '../../contexts/ToastContext';
-import { Question, User, QuestionType, DifficultyLevel, QuestionLanguage, McqOption } from '../../types';
-import { mockSubjects, mockUnits, mockChapters } from '../../mock/academicData';
+import { Question, User, QuestionType, DifficultyLevel, QuestionLanguage, McqOption, BloomLevel } from '../../types';
 import { questionService } from '../../services/questionService';
+import { loadDemoState } from '../../store/demoState';
 import { UnsavedChangesModal } from '../common/UnsavedChangesModal';
 import { Badge } from '../common/Badge';
 import {
@@ -33,10 +33,15 @@ export const QuestionEditForm: React.FC<QuestionEditFormProps> = ({
   const { showToast } = useToast();
   const isEditMode = Boolean(questionId);
   const existingQuestion = questionId ? questionService.getQuestionById(questionId) : undefined;
+  const academic = loadDemoState();
 
   // Form State
-  const [subjectId, setSubjectId] = useState(existingQuestion?.subjectId || 'sub-ds');
+  const permittedSubjects = academic.subjects.filter(s => currentUser.role === 'super_admin' || currentUser.role === 'university_admin' || currentUser.role === 'institution_admin' || (currentUser.subjectIds || []).includes(s.id));
+  const [subjectId, setSubjectId] = useState(existingQuestion?.subjectId || permittedSubjects[0]?.id || 'sub-ds');
   const [unitId, setUnitId] = useState(existingQuestion?.unitId || 'unit-ds-2');
+  const [topicId, setTopicId] = useState(existingQuestion?.topicId || academic.topics.find(topic => topic.unitId === (existingQuestion?.unitId || 'unit-ds-2'))?.id || '');
+  const [bloomLevel, setBloomLevel] = useState<BloomLevel>(existingQuestion?.bloomLevel || 'UNDERSTAND');
+  const [explanation, setExplanation] = useState(existingQuestion?.explanation || '');
   const [chapterId, setChapterId] = useState(existingQuestion?.chapterId || 'ch-ds-2-1');
   const [type, setType] = useState<QuestionType>(existingQuestion?.type || 'short');
   const [language, setLanguage] = useState<QuestionLanguage>(existingQuestion?.language || 'English');
@@ -66,16 +71,19 @@ export const QuestionEditForm: React.FC<QuestionEditFormProps> = ({
     setIsDirty(true);
   };
 
-  const filteredSubjects = mockSubjects.filter(s => s.departmentId === (currentUser?.departmentId || 'dept-cs'));
-  const filteredUnits = mockUnits.filter(u => u.subjectId === subjectId);
-  const filteredChapters = mockChapters.filter(c => c.unitId === unitId);
+  const filteredSubjects = permittedSubjects;
+  const filteredUnits = academic.units.filter(u => u.subjectId === subjectId);
+  const filteredChapters = academic.chapters.filter(c => c.unitId === unitId);
+  const filteredTopics = academic.topics.filter(topic => topic.unitId === unitId);
 
   useEffect(() => {
-    const units = mockUnits.filter(u => u.subjectId === subjectId);
+    const units = academic.units.filter(u => u.subjectId === subjectId);
     if (units.length > 0 && !units.some(u => u.id === unitId)) {
       setUnitId(units[0].id);
     }
-  }, [subjectId, unitId]);
+    const nextTopics = academic.topics.filter(topic => topic.unitId === unitId);
+    if (nextTopics.length && !nextTopics.some(topic => topic.id === topicId)) setTopicId(nextTopics[0].id);
+  }, [subjectId, unitId, topicId]);
 
   const handleCancelClick = () => {
     if (isDirty) {
@@ -91,31 +99,43 @@ export const QuestionEditForm: React.FC<QuestionEditFormProps> = ({
   };
 
   const handleSave = (submitImmediately: boolean) => {
-    if (!text.trim()) {
-      showToast('Validation Required', 'Question text cannot be empty.', 'warning');
+    const subject = academic.subjects.find(item => item.id === subjectId);
+    const selectedUnit = academic.units.find(item => item.id === unitId);
+    const topic = academic.topics.find(item => item.id === topicId);
+    if (!subject || !selectedUnit || selectedUnit.subjectId !== subject.id || !topic || topic.unitId !== selectedUnit.id || !text.trim() || !type || !difficulty || !bloomLevel || !Number.isFinite(marks) || marks < 1) {
+      showToast('Validation Required', 'Choose a subject, unit, topic, question type, marks, difficulty, and Bloom level; enter question text.', 'warning');
       return;
     }
 
-    const selectedSubject = mockSubjects.find(s => s.id === subjectId);
-    const selectedUnit = mockUnits.find(u => u.id === unitId);
-    const selectedChapter = mockChapters.find(c => c.id === chapterId);
+    const selectedSubject = subject;
+    const selectedChapter = academic.chapters.find(c => c.id === chapterId);
 
     const questionToSave: Question = {
       id: existingQuestion ? existingQuestion.id : `Q-${Math.floor(1030 + Math.random() * 8000)}`,
+      questionText: text.trim(),
+      questionType: ({ mcq: 'MCQ', short: 'SHORT_ANSWER', long: 'LONG_ANSWER', essay: 'ESSAY', numerical: 'NUMERICAL', DESCRIPTIVE: 'DESCRIPTIVE' } as Record<string, any>)[type] || 'SHORT_ANSWER',
       subjectId,
       subjectName: selectedSubject?.name || 'Data Structures',
       unitId,
       unitName: selectedUnit?.name || 'Unit 2 — Linked Lists',
+      topicId,
+      topicName: topic.name,
+      programId: subject.programId,
+      programName: academic.programs.find(program => program.id === subject.programId)?.name,
       chapterId,
       chapterName: selectedChapter?.name || 'General Concepts',
-      departmentId: currentUser?.departmentId || 'dept-cs',
-      institutionId: currentUser?.institutionId || 'inst-apex',
+      departmentId: subject.departmentId,
+      institutionId: subject.institutionId || academic.departments.find(department => department.id === subject.departmentId)?.institutionId || currentUser.institutionId,
+      universityId: currentUser.universityId,
       type,
       language,
       marks,
       difficulty,
+      bloomLevel,
       text,
+      explanation,
       answer,
+      answerKey: type === 'mcq' ? correctAnswer : answer,
       tags: tagsInput.split(',').map(t => t.trim()).filter(Boolean),
       status: existingQuestion ? existingQuestion.status : 'Draft',
       version: existingQuestion ? existingQuestion.version : 1,
@@ -215,6 +235,12 @@ export const QuestionEditForm: React.FC<QuestionEditFormProps> = ({
               ))}
             </select>
           </div>
+          <div>
+            <label className="block text-xs font-bold uppercase text-brand-font mb-1.5">Topic <span className="text-rose-500">*</span></label>
+            <select value={topicId} onChange={e => handleInputChange(setTopicId, e.target.value)} className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-semibold text-brand-title">
+              {filteredTopics.map(topic => <option key={topic.id} value={topic.id}>{topic.name}</option>)}
+            </select>
+          </div>
 
           <div>
             <label className="block text-xs font-bold uppercase text-brand-font mb-1.5">
@@ -262,15 +288,7 @@ export const QuestionEditForm: React.FC<QuestionEditFormProps> = ({
               onChange={e => handleInputChange(setType, e.target.value as QuestionType)}
               className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-semibold text-brand-title focus:ring-2 focus:ring-brand-primary"
             >
-              <option value="mcq">Multiple Choice (MCQ)</option>
-              <option value="true_false">True / False</option>
-              <option value="fill_blank">Fill in the Blank</option>
-              <option value="one_word">One Word Answer</option>
-              <option value="short">Short Answer</option>
-              <option value="long">Long Answer</option>
-              <option value="essay">Essay Type</option>
-              <option value="explain">Explain Concepts</option>
-              <option value="difference">Differentiate / Compare</option>
+              <option value="mcq">MCQ</option><option value="short">Short Answer</option><option value="long">Long Answer</option><option value="essay">Essay</option><option value="numerical">Numerical</option><option value="DESCRIPTIVE">Descriptive</option>
             </select>
           </div>
 
@@ -287,6 +305,12 @@ export const QuestionEditForm: React.FC<QuestionEditFormProps> = ({
               <option value="Hindi">Hindi (हिन्दी)</option>
               <option value="Gujarati">Gujarati (ગુજરાતી)</option>
               <option value="Regional">Regional</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-bold uppercase text-brand-font mb-1.5">Bloom level <span className="text-rose-500">*</span></label>
+            <select value={bloomLevel} onChange={e => handleInputChange(setBloomLevel, e.target.value as BloomLevel)} className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-semibold text-brand-title">
+              {(['REMEMBER','UNDERSTAND','APPLY','ANALYZE','EVALUATE','CREATE'] as BloomLevel[]).map(level => <option key={level} value={level}>{level[0] + level.slice(1).toLowerCase()}</option>)}
             </select>
           </div>
 
@@ -387,6 +411,8 @@ export const QuestionEditForm: React.FC<QuestionEditFormProps> = ({
             className="w-full border border-slate-300 rounded-xl p-3 text-xs focus:ring-2 focus:ring-brand-primary text-slate-800"
           />
         </div>
+
+        <div><label className="block text-xs font-bold uppercase text-brand-font mb-1.5">Explanation</label><textarea rows={2} value={explanation} onChange={e => handleInputChange(setExplanation, e.target.value)} placeholder="Optional teaching explanation" className="w-full border border-slate-300 rounded-xl p-3 text-xs focus:ring-2 focus:ring-brand-primary text-slate-800" /></div>
 
         {/* Tags */}
         <div>

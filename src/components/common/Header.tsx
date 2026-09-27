@@ -107,7 +107,7 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="text-right">
             <div className="text-sm font-semibold text-slate-900 flex items-center justify-end space-x-1.5">
               <span>{currentUser.name}</span>
-              {currentUser.role === 'hod' && (
+              {currentUser.role === 'department_admin' && (
                 <span title="HOD Authorization" className="inline-flex items-center">
                   <ShieldCheck className="h-4 w-4 text-emerald-600" />
                 </span>

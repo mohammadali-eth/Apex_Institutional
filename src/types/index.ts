@@ -1,9 +1,60 @@
 export type UserRole =
+  | 'super_admin'
   | 'university_admin'
   | 'institution_admin'
-  | 'hod'
-  | 'teacher'
-  | 'coordinator';
+  | 'department_admin'
+  | 'faculty'
+  | 'question_paper_reviewer'
+  | 'exam_controller'
+  | 'exam_coordinator'
+  | 'question_bank_manager'
+  | 'quality_controller'
+  | 'student'
+  | 'viewer'
+  | 'system_auditor'
+  | 'guest';
+
+export type UniversityId = string;
+export type InstitutionType = 'University' | 'College' | 'School' | 'ITI' | 'Polytechnic';
+export type AcademicStatus = 'active' | 'inactive';
+
+export type PermissionName =
+  | 'user.view'
+  | 'user.create'
+  | 'user.update'
+  | 'user.delete'
+  | 'question.view'
+  | 'question.create'
+  | 'question.update'
+  | 'question.delete'
+  | 'question.approve'
+  | 'question_bank.view'
+  | 'question_bank.manage'
+  | 'question_bank.archive'
+  | 'paper.view'
+  | 'paper.create'
+  | 'paper.update'
+  | 'paper.submit'
+  | 'paper.review'
+  | 'paper.approve'
+  | 'paper.finalize'
+  | 'paper.publish'
+  | 'exam.view'
+  | 'exam.create'
+  | 'exam.update'
+  | 'exam.manage'
+  | 'report.view'
+  | 'audit.view'
+  | 'system.manage';
+
+export interface RoleDefinition {
+  id: UserRole;
+  label: string;
+  permissions: PermissionName[];
+  description?: string;
+  responsibilities?: string[];
+  scope?: string;
+}
 
 export interface AssignedDepartment {
   id: string;
@@ -25,14 +76,42 @@ export interface User {
   departmentId?: string; // Current active department
   departmentName?: string;
   assignedDepartments: AssignedDepartment[]; // Critical for 1 dept vs >1 dept vs 0 dept flow
+  universityId?: string;
+  institutionIds?: string[];
+  departmentIds?: string[];
+  subjectIds?: string[];
+  examIds?: string[];
+  permissions?: PermissionName[];
+  isActive?: boolean;
 }
+
+export type ExaminationStatus = 'PLANNED'|'SCHEDULED'|'ACTIVE'|'COMPLETED'|'CANCELLED';
+export interface Examination { id: string; name: string; code?: string; academicYear?: string; semester?: string; institutionId?: string; departmentId?: string; departmentIds?: string[]; startDate?: string; endDate?: string; status?: ExaminationStatus; coordinatorIds?: string[]; controllerId?: string; }
+export type Exam = Examination;
+export interface AuditEvent { id: string; action: string; actorId: string; occurredAt: string; timestamp?: string; userId?: string; userName?: string; resource?: string; resourceId?: string; description?: string; ipAddress?: string; severity?: 'INFO'|'WARNING'|'CRITICAL'; }
+export interface Notification { id: string; title: string; message: string; read: boolean; }
+export interface QuestionBank { id: string; name: string; subjectId: string; }
+export interface QuestionPaper { id: string; title: string; examId: string; departmentId?: string; }
 
 export interface Institution {
   id: string;
   name: string;
   code: string;
-  type: 'University' | 'College' | 'School' | 'ITI' | 'Polytechnic';
-  status: 'active' | 'inactive';
+  type: InstitutionType;
+  status: AcademicStatus;
+  universityId?: string;
+  address?: string;
+  contactEmail?: string;
+}
+
+export interface University {
+  id: string;
+  name: string;
+  code: string;
+  type: 'State University' | 'Private University' | 'Autonomous University';
+  status: AcademicStatus;
+  region?: string;
+  address?: string;
 }
 
 export interface Department {
@@ -50,7 +129,9 @@ export interface Program {
   code: string;
   departmentId: string;
   durationYears: number;
-  status: 'active' | 'inactive';
+  status: AcademicStatus;
+  institutionId?: string;
+  tagline?: string;
 }
 
 export interface Semester {
@@ -58,6 +139,15 @@ export interface Semester {
   number: number;
   label: string;
   programId: string;
+}
+
+export interface Topic {
+  id: string;
+  name: string;
+  subjectId: string;
+  unitId: string;
+  description?: string;
+  status?: 'active' | 'inactive';
 }
 
 export interface Subject {
@@ -72,6 +162,11 @@ export interface Subject {
   unitCount: number;
   questionCount: number;
   status: 'active' | 'inactive';
+  description?: string;
+  syllabusVersion?: string;
+  category?: string;
+  universityId?: string;
+  institutionId?: string;
 }
 
 export interface Unit {
@@ -116,6 +211,12 @@ export interface Material {
 }
 
 export type QuestionType =
+  | 'MCQ'
+  | 'SHORT_ANSWER'
+  | 'LONG_ANSWER'
+  | 'ESSAY'
+  | 'NUMERICAL'
+  | 'DESCRIPTIVE'
   | 'mcq'
   | 'true_false'
   | 'fill_blank'
@@ -126,6 +227,18 @@ export type QuestionType =
   | 'explain'
   | 'difference'
   | 'problem';
+
+export type BloomLevel =
+  | 'REMEMBER'
+  | 'UNDERSTAND'
+  | 'APPLY'
+  | 'ANALYZE'
+  | 'EVALUATE'
+  | 'CREATE';
+export type CanonicalQuestionType = 'MCQ' | 'SHORT_ANSWER' | 'LONG_ANSWER' | 'ESSAY' | 'NUMERICAL' | 'DESCRIPTIVE';
+export type CanonicalDifficulty = 'EASY' | 'MEDIUM' | 'HARD';
+
+export type QuestionQualityStatus = 'DRAFT' | 'SUBMITTED' | 'UNDER_REVIEW' | 'APPROVED' | 'REJECTED' | 'ARCHIVED';
 
 export interface PreviousPaperQuery {
   institutionId?: string;
@@ -139,8 +252,8 @@ export interface PreviousPaperQuery {
   set?: string;
 }
 
-export type DifficultyLevel = 'Easy' | 'Medium' | 'Hard';
-export type QuestionStatus = 'Draft' | 'Submitted' | 'Approved' | 'Rejected' | 'Archived';
+export type DifficultyLevel = 'EASY' | 'MEDIUM' | 'HARD' | 'Easy' | 'Medium' | 'Hard';
+export type QuestionStatus = 'DRAFT' | 'SUBMITTED' | 'UNDER_REVIEW' | 'APPROVED' | 'REJECTED' | 'ARCHIVED' | 'Draft' | 'Submitted' | 'Approved' | 'Rejected' | 'Archived';
 export type QuestionLanguage = 'English' | 'Hindi' | 'Gujarati' | 'Regional';
 
 export interface McqOption {
@@ -164,22 +277,34 @@ export interface QuestionVersion {
 
 export interface Question {
   id: string;
+  questionText?: string;
+  questionType?: CanonicalQuestionType;
+  isPublic?: boolean;
   subjectId: string;
   subjectName: string;
+  programId?: string;
+  programName?: string;
   unitId: string;
   unitName: string;
-  chapterId: string;
-  chapterName: string;
+  topicId?: string;
+  topicName?: string;
+  chapterId?: string;
+  chapterName?: string;
   departmentId: string;
   institutionId: string;
+  universityId?: string;
   type: QuestionType;
   language: QuestionLanguage;
   marks: number;
   difficulty: DifficultyLevel;
+  bloomLevel?: BloomLevel;
   text: string;
   answer: string;
+  explanation?: string;
+  answerKey?: string;
   tags: string[];
   status: QuestionStatus;
+  qualityStatus?: QuestionQualityStatus;
   options?: McqOption[];
   correctAnswer?: 'A' | 'B' | 'C' | 'D';
   version: number;
@@ -242,7 +367,24 @@ export interface PreviousPaper {
   sections?: PaperSection[];
   questionVersionsUsed?: { questionId: string; version: number }[];
   remarks?: string;
+  workflowStatus?: PaperStatus;
+  title?: string;
+  examId?: string;
+  universityId?: string;
+  submittedBy?: string;
+  reviewerId?: string;
+  qualityControllerId?: string;
+  examControllerId?: string;
+  instructions?: string;
+  reviewComments?: string[];
+  qualityComments?: string[];
+  version?: number;
+  timeline?: { status: PaperStatus; actor: string; at: string; comment?: string }[];
+  history?: { version: number; changedBy: string; changedAt: string; summary: string }[];
 }
+
+export const PAPER_STATUSES = ['DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'CHANGES_REQUESTED', 'QUALITY_REVIEW', 'QUALITY_APPROVED', 'PENDING_FINAL_APPROVAL', 'APPROVED', 'FINALIZED', 'PUBLISHED', 'ARCHIVED'] as const;
+export type PaperStatus = typeof PAPER_STATUSES[number];
 
 export interface BlueprintItem {
   id: string;

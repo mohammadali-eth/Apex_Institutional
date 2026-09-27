@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { materialService } from '../../services/materialService';
 import { mockSubjects } from '../../mock/academicData';
+import { permissionService } from '../../lib/permissions/permissionService';
 import { Material, MaterialUnit } from '../../types';
 import {
   UploadCloud,
@@ -26,7 +27,7 @@ export const MaterialsView: React.FC = () => {
   const { showToast } = useToast();
 
   const deptId = currentDepartment?.id || 'dept-cs';
-  const subjects = mockSubjects.filter(s => s.departmentId === deptId);
+  const subjects = mockSubjects.filter(s => s.departmentId === deptId && currentUser && permissionService.hasSubjectAccess(currentUser, s.id));
 
   const [materials, setMaterials] = useState<Material[]>(() => materialService.getMaterialsByDepartment(deptId));
   const [selectedSubjectId, setSelectedSubjectId] = useState(subjects[0]?.id || 'sub-ds');
@@ -53,7 +54,8 @@ export const MaterialsView: React.FC = () => {
       subject?.name || 'Data Structures',
       deptId,
       uploadType,
-      currentUser?.name || 'Faculty'
+      currentUser?.name || 'Faculty',
+      pastedText
     );
 
     setIsProcessing(false);
@@ -63,6 +65,7 @@ export const MaterialsView: React.FC = () => {
   };
 
   const handleApprove = (id: string) => {
+    if (!currentUser || !permissionService.hasAnyPermission(currentUser, ['question_bank.manage', 'question.approve'])) return;
     materialService.approveMaterialStructure(id);
     if (activeMaterial && activeMaterial.id === id) {
       setActiveMaterial({ ...activeMaterial, status: 'approved' });
@@ -121,7 +124,7 @@ export const MaterialsView: React.FC = () => {
                 const Icon = m.icon;
                 const isSelected = uploadType === m.id;
                 return (
-                  <button
+            <button
                     key={m.id}
                     type="button"
                     onClick={() => setUploadType(m.id as any)}
@@ -165,7 +168,11 @@ export const MaterialsView: React.FC = () => {
             </span>
             <input
               type="file"
-              onChange={e => setFileName(e.target.files?.[0]?.name || 'curriculum.pdf')}
+              onChange={e => {
+                const file = e.target.files?.[0];
+                setFileName(file?.name || '');
+                if (file && file.type.startsWith('text/')) file.text().then(setPastedText);
+              }}
               className="hidden"
               id="file-input"
             />
@@ -202,9 +209,10 @@ export const MaterialsView: React.FC = () => {
             </div>
 
             <div className="flex items-center space-x-2">
-              <button
-                type="button"
-                onClick={() => handleApprove(activeMaterial.id)}
+            <button
+              type="button"
+              onClick={() => handleApprove(activeMaterial.id)}
+              hidden={!currentUser || !permissionService.hasAnyPermission(currentUser, ['question_bank.manage', 'question.approve'])}
                 className="inline-flex items-center space-x-1.5 px-4 py-2 rounded-lg text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm transition"
               >
                 <CheckCircle2 className="h-4 w-4" />

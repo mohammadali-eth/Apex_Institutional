@@ -3,6 +3,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useI18n } from '../../lib/i18n';
 import { userService } from '../../services/userService';
+import { ROLE_DEFINITIONS } from '../../lib/permissions/rolePermissions';
 import { GraduationCap, ArrowRight, Eye, EyeOff, UserCheck } from 'lucide-react';
 
 interface LoginPageProps {
@@ -23,6 +24,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
+  const [mfaRequired, setMfaRequired] = useState(false);
+  const [mfaCode, setMfaCode] = useState('');
 
   useEffect(() => {
     const handleRefreshUsers = () => {
@@ -81,6 +84,17 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
     if (!password.trim()) {
       setPasswordError('Please enter the institutional password.');
       showToast('Login failed', 'Password is required to continue.', 'warning');
+      return;
+    }
+
+    const elevated = !['faculty', 'student', 'viewer', 'guest'].includes(targetUser.role);
+    if (elevated && !mfaRequired) {
+      setMfaRequired(true);
+      showToast('Demo MFA', 'Enter the demo verification code 246810 to continue.', 'info');
+      return;
+    }
+    if (elevated && mfaCode !== '246810') {
+      setPasswordError('Enter the demo MFA code 246810.');
       return;
     }
 
@@ -204,12 +218,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
               </label>
             </div>
 
+            {mfaRequired && <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-brand-font">Demo MFA code</label><input inputMode="numeric" autoComplete="one-time-code" value={mfaCode} onChange={event => setMfaCode(event.target.value)} placeholder="246810" className="w-full rounded-lg border border-slate-300 px-3.5 py-2.5 text-sm" /><p className="mt-1 text-[11px] text-slate-500">Frontend simulation only. Use 246810.</p></div>}
+
             <button
               type="submit"
               disabled={isLoading}
               className="w-full flex items-center justify-center space-x-2 py-3 px-4 rounded-xl text-sm font-bold text-white bg-brand-primary hover:bg-brand-primary-hover shadow-md transition disabled:opacity-50"
             >
-              <span>{isLoading ? 'Authenticating...' : t('auth.signIn')}</span>
+              <span>{isLoading ? 'Authenticating...' : mfaRequired ? 'Verify and sign in' : t('auth.signIn')}</span>
               <ArrowRight className="h-4 w-4" />
             </button>
           </form>
@@ -228,12 +244,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
               {availableUsers.map(user => {
                 const isSelected = user.id === selectedUserId;
                 const deptCount = user.assignedDepartments.length;
-                let badge = `${deptCount} Department`;
-                if (user.role === 'teacher' && deptCount === 0) badge = 'No Department (Blocked Flow)';
-                else if (deptCount > 1) badge = `${deptCount} Departments (Multi-Select)`;
-                else if (user.role === 'hod') badge = 'HOD / Department Admin';
-                else if (user.role === 'coordinator') badge = 'Exam Coordinator';
-                else if (user.role === 'university_admin') badge = 'University Admin';
+                let badge = ROLE_DEFINITIONS[user.role].label;
+                if (deptCount === 0) badge += ' • University scope';
+                else if (deptCount > 1) badge += ` • ${deptCount} departments`;
 
                 return (
                   <button

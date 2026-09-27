@@ -29,15 +29,18 @@ import {
 interface AcademicStructureViewProps {
   onNavigateQuestionBank: () => void;
   onNavigateGenerator: () => void;
+  initialTab?: 'departments' | 'logins' | 'subjects' | 'programs' | 'institutions';
 }
 
 export const AcademicStructureView: React.FC<AcademicStructureViewProps> = ({
   onNavigateQuestionBank,
   onNavigateGenerator,
+  initialTab = 'departments',
 }) => {
   const { currentUser } = useAuth();
 
   const [activeTab, setActiveTab] = useState<'departments' | 'logins' | 'subjects' | 'programs' | 'institutions'>('departments');
+  useEffect(() => setActiveTab(initialTab), [initialTab]);
   const [searchTerm, setSearchTerm] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState<string>('all');
 
@@ -64,14 +67,14 @@ export const AcademicStructureView: React.FC<AcademicStructureViewProps> = ({
   const [deptFacultyEmail, setDeptFacultyEmail] = useState('');
   const [deptFacultyPassword, setDeptFacultyPassword] = useState('Apex#2026');
   const [showDeptFacultyPassword, setShowDeptFacultyPassword] = useState(false);
-  const [deptFacultyRole, setDeptFacultyRole] = useState<UserRole>('hod');
+  const [deptFacultyRole, setDeptFacultyRole] = useState<UserRole>('department_admin');
 
   // Standalone Login ID Form State (for adding additional logins to existing depts)
   const [loginFullName, setLoginFullName] = useState('');
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('Apex#2026');
   const [showLoginPassword, setShowLoginPassword] = useState(false);
-  const [loginRole, setLoginRole] = useState<UserRole>('teacher');
+  const [loginRole, setLoginRole] = useState<UserRole>('faculty');
   const [loginSelectedDepts, setLoginSelectedDepts] = useState<string[]>([departments[0]?.id || 'dept-cs']);
   const [loginInstitutionId, setLoginInstitutionId] = useState(institutions[0]?.id || 'inst-apex');
 
@@ -140,6 +143,7 @@ export const AcademicStructureView: React.FC<AcademicStructureViewProps> = ({
         institutionId: deptInstitutionId,
         departmentIds: [newDept.id],
       });
+      if (!createdUser) return;
 
       setCreatedCredentialNotification({
         name: createdUser.name,
@@ -173,6 +177,7 @@ export const AcademicStructureView: React.FC<AcademicStructureViewProps> = ({
       institutionId: loginInstitutionId,
       departmentIds: loginSelectedDepts,
     });
+    if (!created) return;
 
     const deptNames = departments
       .filter(d => loginSelectedDepts.includes(d.id))
@@ -199,23 +204,23 @@ export const AcademicStructureView: React.FC<AcademicStructureViewProps> = ({
     setTimeout(() => setCopiedId(null), 2500);
   };
 
-  const isUniversityAdmin = currentUser?.role === 'university_admin' || currentUser?.role === 'institution_admin' || currentUser?.role === 'hod';
+  const isUniversityAdmin = currentUser?.role === 'university_admin' || currentUser?.role === 'institution_admin' || currentUser?.role === 'department_admin';
 
   const roleConfigs = [
     {
-      id: 'teacher' as UserRole,
+      id: 'faculty' as UserRole,
       title: 'Teacher',
       desc: 'Author, edit and submit exam questions',
       badge: 'Faculty'
     },
     {
-      id: 'hod' as UserRole,
+      id: 'department_admin' as UserRole,
       title: 'Head of Department (HOD)',
       desc: 'Review submissions & approve examination papers',
       badge: 'HOD'
     },
     {
-      id: 'coordinator' as UserRole,
+      id: 'exam_coordinator' as UserRole,
       title: 'Exam Coordinator',
       desc: 'Generate balanced multi-set papers & distribution',
       badge: 'Coordinator'
@@ -647,9 +652,9 @@ export const AcademicStructureView: React.FC<AcademicStructureViewProps> = ({
                             className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${
                               user.role === 'university_admin'
                                 ? 'bg-brand-secondary text-white shadow-sm'
-                                : user.role === 'hod'
+                                : user.role === 'department_admin'
                                 ? 'bg-brand-primary-light text-brand-secondary border border-brand-primary/40 font-bold'
-                                : user.role === 'coordinator'
+                                : user.role === 'exam_coordinator'
                                 ? 'bg-brand-secondary/10 text-brand-secondary border border-brand-secondary/30'
                                 : 'bg-slate-100 text-slate-700'
                             }`}

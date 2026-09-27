@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User } from '../types';
 import { userService } from '../services/userService';
 import { loadDemoState, saveDemoState } from '../store/demoState';
+import { auditService } from '../services/auditService';
 
 interface AuthContextType {
   currentUser: User | null;
@@ -26,7 +27,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const savedId = state.activeUserId || localStorage.getItem('qpms_active_user');
       if (savedId) {
         const found = userService.getUserById(savedId);
-        if (found) return found;
+        if (found && found.isActive !== false) return found;
       }
     } catch {}
     return null;
@@ -45,11 +46,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = (userId: string) => {
     const user = userService.getUserById(userId) || userService.getUsers()[0];
-    if (!user) {
+    if (!user || user.isActive === false) {
       return { requiresDeptSelection: false, noDeptAssigned: false };
     }
 
     setCurrentUser(user);
+    auditService.record({ action: 'LOGIN', user, resource: 'session', resourceId: user.id, description: `${user.name} signed in` });
     const nextState = loadDemoState();
     nextState.activeUserId = user.id;
     nextState.activeDepartmentId = user.departmentId || nextState.activeDepartmentId || null;
@@ -60,7 +62,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch {}
 
     const deptCount = user.assignedDepartments.length;
-    if (deptCount === 0 && user.role === 'teacher') {
+    if (deptCount === 0 && user.role === 'faculty') {
       return { requiresDeptSelection: false, noDeptAssigned: true };
     }
     if (deptCount > 1) {
@@ -83,8 +85,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const switchUser = (userId: string) => {
     const user = userService.getUserById(userId);
-    if (user) {
+    if (user && user.isActive !== false) {
       setCurrentUser(user);
+      auditService.record({ action: 'LOGIN', user, resource: 'session', resourceId: user.id, description: `Switched demo session to ${user.name}` });
       const nextState = loadDemoState();
       nextState.activeUserId = user.id;
       nextState.activeDepartmentId = user.departmentId || nextState.activeDepartmentId || null;

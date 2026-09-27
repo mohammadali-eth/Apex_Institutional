@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useDepartment } from '../../contexts/DepartmentContext';
 import { useI18n, languages } from '../../lib/i18n';
+import { permissionService } from '../../lib/permissions/permissionService';
 import {
   GraduationCap,
   LayoutDashboard,
@@ -21,7 +22,8 @@ import {
   Menu,
   X,
   ShieldCheck,
-  UserCheck
+  UserCheck,
+  CalendarDays
 } from 'lucide-react';
 
 interface AppShellProps {
@@ -46,18 +48,34 @@ export const AppShell: React.FC<AppShellProps> = ({
   const [showUserMenu, setShowUserMenu] = useState(false);
 
   const navItems = [
-    { id: 'dashboard', label: t('nav.dashboard'), icon: LayoutDashboard, roles: ['teacher', 'hod', 'coordinator', 'institution_admin', 'university_admin'] },
-    { id: 'academic', label: t('nav.academic'), icon: Building2, roles: ['hod', 'coordinator', 'institution_admin', 'university_admin'] },
-    { id: 'materials', label: t('nav.materials'), icon: FileText, roles: ['teacher', 'hod', 'coordinator'] },
-    { id: 'questions', label: t('nav.questions'), icon: HelpCircle, roles: ['teacher', 'hod', 'coordinator'] },
-    { id: 'generator', label: t('nav.generator'), icon: Layers, roles: ['teacher', 'hod', 'coordinator'] },
-    { id: 'history', label: t('nav.history'), icon: History, roles: ['teacher', 'hod', 'coordinator', 'institution_admin'] },
-    { id: 'approvals', label: t('nav.approvals'), icon: CheckSquare, roles: ['hod', 'coordinator', 'institution_admin', 'university_admin'] },
-    { id: 'reports', label: t('nav.reports'), icon: BarChart3, roles: ['hod', 'coordinator', 'institution_admin', 'university_admin'] },
-    { id: 'settings', label: t('nav.settings'), icon: Settings, roles: ['teacher', 'hod', 'coordinator', 'institution_admin', 'university_admin'] },
+    { id: 'dashboard', label: t('nav.dashboard'), icon: LayoutDashboard, allowed: () => !!currentUser },
+    { id: 'academic', label: t('nav.academic'), icon: Building2, allowed: () => permissionService.hasAnyPermission(currentUser, ['system.manage', 'user.update', 'user.create', 'question_bank.manage']) },
+    { id: 'materials', label: t('nav.materials'), icon: FileText, allowed: () => permissionService.hasAnyPermission(currentUser, ['question.create', 'question.update', 'question_bank.manage']) },
+    { id: 'questions', label: t('nav.questions'), icon: HelpCircle, allowed: () => !!currentUser && (currentUser.role === 'guest' || permissionService.hasPermission(currentUser, 'question.view') || permissionService.hasPermission(currentUser, 'question_bank.view')) },
+    { id: 'generator', label: t('nav.generator'), icon: Layers, allowed: () => permissionService.hasAnyPermission(currentUser, ['paper.create', 'paper.update', 'paper.submit']) },
+    { id: 'history', label: t('nav.history'), icon: History, allowed: () => permissionService.hasAnyPermission(currentUser, ['paper.view', 'report.view']) },
+    { id: 'approvals', label: t('nav.approvals'), icon: CheckSquare, allowed: () => permissionService.hasAnyPermission(currentUser, ['paper.review', 'paper.approve', 'paper.finalize']) },
+    { id: 'reports', label: t('nav.reports'), icon: BarChart3, allowed: () => permissionService.hasPermission(currentUser, 'report.view') },
+    { id: 'settings', label: t('nav.settings'), icon: Settings, allowed: () => permissionService.hasAnyPermission(currentUser, ['system.manage', 'user.update', 'user.create']) },
+    { id: 'users', label: 'Users', icon: UserCheck, allowed: () => permissionService.hasPermission(currentUser, 'user.view') },
+    { id: 'audit', label: 'Audit', icon: ShieldCheck, allowed: () => permissionService.hasPermission(currentUser, 'audit.view') },
+    { id: 'examinations', label: 'Examinations', icon: CalendarDays, allowed: () => permissionService.hasPermission(currentUser, 'exam.view') },
+    { id: 'quality', label: 'Quality Control', icon: ShieldCheck, allowed: () => currentUser?.role === 'quality_controller' || ['super_admin','institution_admin','university_admin'].includes(currentUser?.role || '') },
+    { id: 'roles', label: 'Roles & Permissions', icon: ShieldCheck, allowed: () => permissionService.hasPermission(currentUser, 'system.manage') },
+    { id: 'student', label: 'Student Portal', icon: GraduationCap, allowed: () => currentUser?.role === 'student' },
+    { id: 'public', label: 'Public Portal', icon: Globe, allowed: () => currentUser?.role === 'guest' },
+    { id: 'public-papers', label: 'Published Papers', icon: FileText, allowed: () => currentUser?.role === 'guest' },
+    { id: 'public-exams', label: 'Public Exams', icon: CalendarDays, allowed: () => currentUser?.role === 'guest' },
   ];
 
-  const allowedNav = navItems.filter(item => !currentUser || item.roles.includes(currentUser.role));
+  const visibleRoleNav = currentUser?.role === 'guest'
+    ? navItems.filter(item => ['public','public-papers','public-exams'].includes(item.id))
+    : currentUser?.role === 'student'
+      ? navItems.filter(item => ['student','public-papers'].includes(item.id))
+      : currentUser?.role === 'system_auditor'
+        ? navItems.filter(item => ['dashboard','audit'].includes(item.id))
+        : navItems.filter(item => item.allowed());
+  const allowedNav = visibleRoleNav.filter(item => item.allowed() || ['public-papers'].includes(item.id) && currentUser?.role==='student');
 
   const hasMultipleDepartments = (currentUser?.assignedDepartments?.length || 0) > 1;
 
@@ -140,7 +158,7 @@ export const AppShell: React.FC<AppShellProps> = ({
                 <div className="hidden lg:block text-left text-xs">
                   <div className="font-semibold text-white leading-tight flex items-center space-x-1">
                     <span>{currentUser?.name}</span>
-                    {currentUser?.role === 'hod' && <ShieldCheck className="h-3 w-3 text-emerald-400" />}
+                    {currentUser?.role === 'department_admin' && <ShieldCheck className="h-3 w-3 text-emerald-400" />}
                   </div>
                   <div className="text-[10px] text-slate-300 capitalize">{currentUser?.role?.replace('_', ' ')}</div>
                 </div>
@@ -195,10 +213,10 @@ export const AppShell: React.FC<AppShellProps> = ({
       </header>
 
       {/* Main Container: Sidebar + Content */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex min-h-0">
         {/* Sidebar (Desktop) */}
         <aside
-          className={`hidden md:flex flex-col bg-brand-secondary text-white border-r border-slate-700 transition-all duration-300 ${
+          className={`hidden md:flex flex-col bg-brand-secondary text-white border-r border-slate-700 transition-all duration-300 sticky top-14 self-start h-[calc(100vh-3.5rem)] ${
             isCollapsed ? 'w-16' : 'w-60'
           }`}
         >
@@ -278,7 +296,7 @@ export const AppShell: React.FC<AppShellProps> = ({
         )}
 
         {/* Content Viewport */}
-        <div className="flex-1 flex flex-col overflow-y-auto">
+        <div className="flex-1 flex flex-col min-h-0">
           <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full">
             {children}
           </main>

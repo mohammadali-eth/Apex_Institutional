@@ -60,6 +60,12 @@
   text-align: left;
 }
 
+html[data-display-density="compact"] body {
+  font-size: 0.94rem;
+}
+html[data-display-density="compact"] .p-4 { padding: 0.75rem; }
+html[data-display-density="compact"] .p-5 { padding: 1rem; }
+
 /* Examination Paper Print Watermark */
 .paper-preview-watermark {
   position: relative;

@@ -7,6 +7,7 @@ import { VersionCompareModal } from './VersionCompareModal';
 import { Modal } from '../common/Modal';
 import { canUserEditQuestion, canUserReviewQuestion } from '../../services/permissionService';
 import { questionService } from '../../services/questionService';
+import { permissionService } from '../../lib/permissions/permissionService';
 import {
   ArrowLeft,
   Edit3,
@@ -76,7 +77,7 @@ export const QuestionDetailsView: React.FC<QuestionDetailsViewProps> = ({
 
   const handleArchive = () => {
     if (window.confirm(`Archive question ${question.id}?`)) {
-      questionService.archiveQuestion(question.id);
+      questionService.archiveQuestion(question.id, currentUser);
       setQuestion(questionService.getQuestionById(question.id));
       onQuestionUpdated();
       showToast('Question Archived', `${question.id} has been archived.`, 'info');
@@ -163,14 +164,14 @@ export const QuestionDetailsView: React.FC<QuestionDetailsViewProps> = ({
           )}
 
           {/* Duplicate Button */}
-          <button
+          {permissionService.hasPermission(currentUser, 'question.create') && <button
             type="button"
             onClick={handleDuplicate}
             className="inline-flex items-center space-x-1.5 px-3.5 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg transition"
           >
             <Copy className="h-4 w-4 text-slate-500" />
             <span>Duplicate</span>
-          </button>
+          </button>}
 
           {/* Submit for Review (if Draft or Rejected) */}
           {(question.status === 'Draft' || question.status === 'Rejected') && editPermission.allowed && (
@@ -207,7 +208,7 @@ export const QuestionDetailsView: React.FC<QuestionDetailsViewProps> = ({
           )}
 
           {/* Archive */}
-          {question.status !== 'Archived' && editPermission.allowed && (
+          {question.status !== 'Archived' && permissionService.hasPermission(currentUser, 'question_bank.archive') && (
             <button
               type="button"
               onClick={handleArchive}
@@ -249,8 +250,9 @@ export const QuestionDetailsView: React.FC<QuestionDetailsViewProps> = ({
               <span>Question Content ({question.type.toUpperCase()})</span>
             </h3>
             <div className="text-base text-slate-900 leading-relaxed font-serif bg-slate-50/60 p-4 rounded-lg border border-slate-100">
-              {question.text}
+              {question.questionText || question.text}
             </div>
+            <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-600"><span>{question.topicName || 'Topic not assigned'}</span><span>•</span><span>{question.bloomLevel || 'UNDERSTAND'}</span><span>•</span><span>{question.marks} marks</span>{(question.tags || []).map(tag => <span key={tag} className="rounded bg-slate-100 px-2 py-0.5">{tag}</span>)}</div>
 
             {/* MCQ Options Display if applicable */}
             {question.type === 'mcq' && question.options && (
@@ -299,6 +301,7 @@ export const QuestionDetailsView: React.FC<QuestionDetailsViewProps> = ({
             <div className="text-sm text-slate-700 leading-relaxed bg-emerald-50/30 p-4 rounded-lg border border-emerald-100">
               {question.answer}
             </div>
+            {question.explanation && <p className="mt-3 text-sm text-slate-600"><strong>Explanation:</strong> {question.explanation}</p>}
           </div>
 
           {/* Version History Component */}

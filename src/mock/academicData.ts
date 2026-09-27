@@ -1,4 +1,25 @@
-import { User, Institution, Department, Program, Semester, Subject, Unit, Chapter } from '../types';
+import { User, Institution, Department, Program, Semester, Subject, Unit, Chapter, Topic, University } from '../types';
+
+export const mockUniversities: University[] = [
+  {
+    id: 'uni-gtau',
+    name: 'Gujarat Technological Apex University',
+    code: 'GTAU',
+    type: 'State University',
+    status: 'active',
+    region: 'Gujarat',
+    address: 'Near Ahmedabad, Gujarat',
+  },
+  {
+    id: 'uni-apex',
+    name: 'Apex Research University',
+    code: 'ARU',
+    type: 'Private University',
+    status: 'active',
+    region: 'Gujarat',
+    address: 'Vadodara, Gujarat',
+  }
+];
 
 export const mockInstitutions: Institution[] = [
   {
@@ -7,6 +28,7 @@ export const mockInstitutions: Institution[] = [
     code: 'AITS-042',
     type: 'College',
     status: 'active',
+    universityId: 'uni-apex',
   },
   {
     id: 'inst-univ',
@@ -14,6 +36,7 @@ export const mockInstitutions: Institution[] = [
     code: 'GTAU-MAIN',
     type: 'University',
     status: 'active',
+    universityId: 'uni-gtau',
   }
 ];
 
@@ -192,15 +215,24 @@ export const mockChapters: Chapter[] = [
   { id: 'ch-ds-4-1', name: 'BST Insert, Delete and Traversals', unitId: 'unit-ds-4' },
 ];
 
+export const mockTopics: Topic[] = [
+  { id: 'topic-1', name: 'Arrays and Pointers', subjectId: 'sub-ds', unitId: 'unit-ds-1', description: 'Memory layout and pointer traversal principles' },
+  { id: 'topic-2', name: 'Linked List Traversal', subjectId: 'sub-ds', unitId: 'unit-ds-2', description: 'Node navigation and difference between singly and doubly structures' },
+  { id: 'topic-3', name: 'Stack Applications', subjectId: 'sub-ds', unitId: 'unit-ds-3', description: 'Expression evaluation and function call stack design' },
+  { id: 'topic-4', name: 'BST Operations', subjectId: 'sub-ds', unitId: 'unit-ds-4', description: 'Insertion, deletion and balancing pattern analysis' },
+  { id: 'topic-5', name: 'Graph Traversal', subjectId: 'sub-ds', unitId: 'unit-ds-5', description: 'DFS, BFS and adjacency representation' },
+  { id: 'topic-6', name: 'Thevenin and Norton', subjectId: 'sub-ecn', unitId: 'unit-ee-1', description: 'Circuit equivalence and dependent source analysis' },
+];
+
 /**
  * 6 Realistic Personas Covering Critical Login -> Department Flow (Requirements #5, #6, #10)
  */
-export const mockUsers: User[] = [
+const initialDemoUsers: User[] = [
   {
     id: 'u-rahul',
     name: 'Dr. Rahul Patel',
     email: 'rahul.patel@apexuniversity.edu',
-    role: 'teacher',
+    role: 'faculty',
     institutionId: 'inst-apex',
     institutionName: 'Apex Institute of Technology & Science',
     departmentId: 'dept-cs',
@@ -221,7 +253,7 @@ export const mockUsers: User[] = [
     id: 'u-amit',
     name: 'Prof. Amit Shah',
     email: 'amit.shah@apexuniversity.edu',
-    role: 'teacher',
+    role: 'question_bank_manager',
     institutionId: 'inst-apex',
     institutionName: 'Apex Institute of Technology & Science',
     assignedDepartments: [
@@ -249,16 +281,18 @@ export const mockUsers: User[] = [
     id: 'u-neha',
     name: 'Dr. Neha Sharma',
     email: 'neha.sharma@apexuniversity.edu',
-    role: 'teacher',
+    role: 'student',
     institutionId: 'inst-apex',
     institutionName: 'Apex Institute of Technology & Science',
-    assignedDepartments: [] // No department assigned scenario
+    departmentId: 'dept-cs',
+    departmentName: 'Department of Computer Science & Engineering',
+    assignedDepartments: [{ id: 'dept-cs', name: 'Department of Computer Science & Engineering', code: 'CSE', institutionId: 'inst-apex', institutionName: 'Apex Institute of Technology & Science', programCount: 2, subjectCount: 4 }]
   },
   {
     id: 'u-sunita',
     name: 'Prof. Sunita Sharma',
     email: 'sunita.sharma@apexuniversity.edu',
-    role: 'hod',
+    role: 'department_admin',
     institutionId: 'inst-apex',
     institutionName: 'Apex Institute of Technology & Science',
     departmentId: 'dept-cs',
@@ -279,7 +313,7 @@ export const mockUsers: User[] = [
     id: 'u-rajesh',
     name: 'Prof. Rajesh Joshi',
     email: 'rajesh.joshi@apexuniversity.edu',
-    role: 'coordinator',
+    role: 'exam_coordinator',
     institutionId: 'inst-apex',
     institutionName: 'Apex Institute of Technology & Science',
     departmentId: 'dept-cs',
@@ -324,3 +358,31 @@ export const mockUsers: User[] = [
     assignedDepartments: []
   }
 ];
+
+import { ROLE_DEFINITIONS } from '../lib/permissions/rolePermissions';
+const rolePersonas: Array<{ id: string; name: string; email: string; role: User['role'] }> = [
+  { id: 'u-super', name: 'Avery Morgan', email: 'avery.morgan@apexuniversity.edu', role: 'super_admin' },
+  { id: 'u-inst-admin', name: 'Priya Desai', email: 'priya.desai@apexuniversity.edu', role: 'institution_admin' },
+  { id: 'u-reviewer', name: 'Nikhil Rao', email: 'nikhil.rao@apexuniversity.edu', role: 'question_paper_reviewer' },
+  { id: 'u-controller', name: 'Meera Iyer', email: 'meera.iyer@apexuniversity.edu', role: 'exam_controller' },
+  { id: 'u-quality', name: 'Kavita Menon', email: 'kavita.menon@apexuniversity.edu', role: 'quality_controller' },
+  { id: 'u-viewer', name: 'Arjun Shah', email: 'arjun.shah@apexuniversity.edu', role: 'viewer' },
+  { id: 'u-auditor', name: 'Rhea Kapoor', email: 'rhea.kapoor@apexuniversity.edu', role: 'system_auditor' },
+  { id: 'u-guest', name: 'Demo Guest', email: 'guest@apexuniversity.edu', role: 'guest' },
+];
+export const mockUsers: User[] = [...initialDemoUsers, ...rolePersonas.map(persona => ({
+  ...initialDemoUsers[0], ...persona,
+  permissions: ROLE_DEFINITIONS[persona.role].permissions,
+  universityId: 'uni-apex', institutionIds: ['inst-apex'],
+  departmentIds: ['dept-cs'], examIds: ['exam-midterm'],
+}))].map(user => ({
+  ...user,
+  universityId: user.universityId || 'univ-apex',
+  institutionIds: user.institutionIds || [user.institutionId],
+  departmentIds: user.departmentIds || user.assignedDepartments.map(department => department.id),
+  subjectIds: user.subjectIds?.length ? user.subjectIds : mockSubjects.filter(subject =>
+    (user.departmentIds || user.assignedDepartments.map(department => department.id)).includes(subject.departmentId)
+  ).map(subject => subject.id),
+  examIds: user.examIds?.length ? user.examIds : user.role === 'student' ? ['exam-midterm'] : [],
+  permissions: user.permissions || ROLE_DEFINITIONS[user.role].permissions,
+}));

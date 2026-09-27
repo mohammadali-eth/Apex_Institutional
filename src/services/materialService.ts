@@ -1,4 +1,5 @@
 import { Material, MaterialUnit } from '../types';
+import { loadDemoState, saveDemoState } from '../store/demoState';
 
 const mockInitialMaterials: Material[] = [
   {
@@ -45,8 +46,27 @@ const mockInitialMaterials: Material[] = [
   }
 ];
 
-let materialsStore: Material[] = [...mockInitialMaterials];
+const MATERIAL_KEY = 'qpms_materials_v1';
+const readMaterials = () => {
+  try {
+    const stored = localStorage.getItem(MATERIAL_KEY);
+    if (stored) return JSON.parse(stored) as Material[];
+  } catch { /* use demo seed */ }
+  const centralized = loadDemoState().materials;
+  return centralized.length ? centralized : [...mockInitialMaterials];
+};
+let materialsStore: Material[] = readMaterials();
 const listeners: Array<() => void> = [];
+const persist = (action: string) => {
+  try { localStorage.setItem(MATERIAL_KEY, JSON.stringify(materialsStore)); } catch { /* storage is optional */ }
+  const state = loadDemoState();
+  state.materials = [...materialsStore];
+  const actor=state.users.find(user=>user.id===state.activeUserId);
+  const occurredAt=new Date().toISOString();
+  state.auditEvents = [{ id: `audit-${Date.now()}`, action: 'MATERIAL_UPDATED', actorId: state.activeUserId || 'system', occurredAt, timestamp: occurredAt, userId: state.activeUserId || 'system', userName: actor?.name || 'System', resource: 'material', description: action, severity: 'INFO' as const }, ...state.auditEvents].slice(0, 100);
+  state.notifications = [{ id: `notification-${Date.now()}`, title: 'Syllabus updated', message: action, read: false }, ...state.notifications].slice(0, 100);
+  saveDemoState(state);
+};
 
 export const materialService = {
   subscribe(fn: () => void) {
@@ -67,7 +87,8 @@ export const materialService = {
     subjectName: string,
     deptId: string,
     sourceType: 'pdf' | 'scanned_image' | 'text_paste',
-    author: string
+    author: string,
+    rawText = ''
   ): Promise<Material> {
     return new Promise((resolve) => {
       setTimeout(() => {
@@ -81,6 +102,7 @@ export const materialService = {
           uploadedBy: author,
           uploadedAt: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
           status: 'detected',
+          rawText,
           extractedUnits: [
             {
               id: `mu-${Date.now()}-1`,
@@ -102,6 +124,7 @@ export const materialService = {
           ]
         };
         materialsStore.unshift(newMat);
+        persist(`Material ${newMat.title} extracted for subject ${subjectName}.`);
         listeners.forEach(fn => fn());
         resolve(newMat);
       }, 800);
@@ -112,6 +135,18 @@ export const materialService = {
     const mat = materialsStore.find(m => m.id === id);
     if (mat) {
       mat.status = 'approved';
+      const state = loadDemoState();
+      for (const extracted of mat.extractedUnits) {
+        let unitId = extracted.id;
+        const existing = state.units.find(unit => unit.id === unitId || (unit.subjectId === mat.subjectId && unit.number === extracted.unitNumber));
+        if (existing) unitId = existing.id;
+        else state.units.push({ id: unitId, number: extracted.unitNumber, name: extracted.name, subjectId: mat.subjectId });
+        for (const extractedTopic of extracted.topics) {
+          if (!state.topics.some(topic => topic.id === extractedTopic.id)) state.topics.push({ id: extractedTopic.id, name: extractedTopic.name, subjectId: mat.subjectId, unitId, status: 'active' });
+        }
+      }
+      saveDemoState(state);
+      persist(`Approved syllabus structure ${mat.title}.`);
       listeners.forEach(fn => fn());
     }
   },
@@ -121,6 +156,7 @@ export const materialService = {
     if (mat) {
       mat.extractedUnits = units;
       mat.status = 'reviewed';
+      persist(`Updated detected syllabus structure ${mat.title}.`);
       listeners.forEach(fn => fn());
     }
   }
