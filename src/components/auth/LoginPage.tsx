@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
 import { useI18n } from '../../lib/i18n';
 import { userService } from '../../services/userService';
 import { GraduationCap, ArrowRight, Eye, EyeOff, UserCheck } from 'lucide-react';
@@ -11,6 +12,7 @@ interface LoginPageProps {
 export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
   const { login } = useAuth();
   const { t } = useI18n();
+  const { showToast } = useToast();
 
   const [availableUsers, setAvailableUsers] = useState(() => userService.getUsers());
   const [selectedUserId, setSelectedUserId] = useState(() => availableUsers[0]?.id || 'u-rahul');
@@ -19,33 +21,91 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+  const [emailError, setEmailError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
 
   useEffect(() => {
     const handleRefreshUsers = () => {
-      setAvailableUsers(userService.getUsers());
+      const refreshed = userService.getUsers();
+      setAvailableUsers(refreshed);
+      if (!refreshed.some(user => user.id === selectedUserId)) {
+        setSelectedUserId(refreshed[0]?.id || 'u-rahul');
+      }
     };
     window.addEventListener('qpms_users_updated', handleRefreshUsers);
     return () => window.removeEventListener('qpms_users_updated', handleRefreshUsers);
-  }, []);
+  }, [selectedUserId]);
 
   const handleUserSelect = (id: string) => {
     setSelectedUserId(id);
     const u = availableUsers.find(user => user.id === id);
     if (u) {
       setEmail(u.email);
+      setEmailError('');
+      setPasswordError('');
     }
   };
 
   const handleSignIn = (e: React.FormEvent) => {
     e.preventDefault();
+
+    const trimmedEmail = email.trim().toLowerCase();
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!trimmedEmail) {
+      setEmailError('Please enter your institutional email address.');
+      showToast('Login failed', 'Email is required to continue.', 'warning');
+      return;
+    }
+
+    if (!emailPattern.test(trimmedEmail)) {
+      setEmailError('Use a valid university email format, such as name@college.edu.');
+      showToast('Login failed', 'The email format looks invalid.', 'warning');
+      return;
+    }
+
+    const matched = availableUsers.find(u => u.email.toLowerCase() === trimmedEmail);
+    const selectedMatch = availableUsers.find(u => u.id === selectedUserId);
+    const targetUser = matched || selectedMatch || availableUsers[0];
+
+    if (!targetUser) {
+      setEmailError('No demo user is available for sign-in.');
+      showToast('Login failed', 'No demo user is available to sign in.', 'error');
+      return;
+    }
+
+    if (matched && matched.id !== selectedUserId) {
+      setSelectedUserId(matched.id);
+    }
+
+    if (!password.trim()) {
+      setPasswordError('Please enter the institutional password.');
+      showToast('Login failed', 'Password is required to continue.', 'warning');
+      return;
+    }
+
+    const resolvedEmail = matched ? matched.email : targetUser.email;
+    if (trimmedEmail !== resolvedEmail.toLowerCase()) {
+      setEmailError('This email does not match the selected university profile.');
+      showToast('Login failed', 'Use the email linked to the selected persona.', 'warning');
+      return;
+    }
+
+    setSelectedUserId(targetUser.id);
+    setEmail(targetUser.email);
+    setEmailError('');
+    setPasswordError('');
     setIsLoading(true);
-    setTimeout(() => {
+
+    window.setTimeout(() => {
       setIsLoading(false);
-      // If user typed custom email matching a user, use that user's id
-      const matched = availableUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
-      const res = login(matched ? matched.id : selectedUserId);
+      const res = login(targetUser.id);
+      showToast('Welcome back', `${targetUser.name} has been signed in successfully.`, 'success');
+      if (window.location.hash !== '#dashboard') {
+        window.location.hash = '#dashboard';
+      }
       onSuccess(res);
-    }, 400);
+    }, 300);
   };
 
   return (
@@ -73,9 +133,16 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
                 type="email"
                 required
                 value={email}
-                onChange={e => setEmail(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-brand-primary focus:border-brand-primary font-medium"
+                aria-invalid={Boolean(emailError)}
+                onChange={e => {
+                  setEmail(e.target.value);
+                  if (emailError) setEmailError('');
+                }}
+                className={`w-full px-3.5 py-2.5 bg-white border rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-brand-primary focus:border-brand-primary font-medium ${
+                  emailError ? 'border-rose-300 bg-rose-50' : 'border-slate-300'
+                }`}
               />
+              {emailError && <p className="mt-2 text-xs text-rose-600">{emailError}</p>}
             </div>
 
             <div>
@@ -85,7 +152,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
                 </label>
                 <a
                   href="#forgot"
-                  onClick={(e) => { e.preventDefault(); alert('Password recovery is managed via the University Central Directory.'); }}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    showToast('Password Recovery', 'Password reset is managed through the University Central Directory.', 'info');
+                  }}
                   className="text-xs text-brand-font hover:text-brand-title"
                 >
                   Forgot password?
@@ -96,9 +166,15 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
                   type={showPassword ? 'text' : 'password'}
                   required
                   value={password}
-                  onChange={e => setPassword(e.target.value)}
+                  aria-invalid={Boolean(passwordError)}
+                  onChange={e => {
+                    setPassword(e.target.value);
+                    if (passwordError) setPasswordError('');
+                  }}
                   placeholder="Enter institutional password"
-                  className="w-full px-3.5 py-2.5 pr-10 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-brand-primary focus:border-brand-primary font-medium"
+                  className={`w-full px-3.5 py-2.5 pr-10 bg-white border rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-brand-primary focus:border-brand-primary font-medium ${
+                    passwordError ? 'border-rose-300 bg-rose-50' : 'border-slate-300'
+                  }`}
                 />
                 <button
                   type="button"
@@ -113,6 +189,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
                   )}
                 </button>
               </div>
+              {passwordError && <p className="mt-2 text-xs text-rose-600">{passwordError}</p>}
             </div>
 
             <div className="flex items-center justify-between text-xs">

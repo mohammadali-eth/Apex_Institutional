@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useToast } from '../../contexts/ToastContext';
 import { PaperGenerationContext, User, PreviousPaper } from '../../types';
 import { mockSubjects } from '../../mock/academicData';
 import { paperService } from '../../services/paperService';
@@ -26,6 +27,7 @@ export const GeneratorPreviewStep: React.FC<GeneratorPreviewStepProps> = ({
   onReset,
   onNavigateHistory,
 }) => {
+  const { showToast } = useToast();
   const currentSubject = mockSubjects.find(s => s.id === context.subjectId);
   const now = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
   const [newPaperId] = useState(`QP-2026-${Math.floor(100 + Math.random() * 899)}`);
@@ -55,7 +57,7 @@ export const GeneratorPreviewStep: React.FC<GeneratorPreviewStepProps> = ({
 
     paperService.createPaper(newPaper);
     setIsSaved(true);
-    alert(`Question Paper ${newPaperId} has been successfully compiled and saved to Paper History as a Draft!`);
+    showToast('Paper Saved', `${newPaperId} has been saved to paper history as draft.`, 'success');
   };
 
   return (

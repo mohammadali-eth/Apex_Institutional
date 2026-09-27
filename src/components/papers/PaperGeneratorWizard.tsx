@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useDepartment } from '../../contexts/DepartmentContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
 import { mockPrograms, mockSemesters, mockSubjects, mockUnits } from '../../mock/academicData';
 import { paperService } from '../../services/paperService';
 import { questionService } from '../../services/questionService';
@@ -40,6 +41,7 @@ export const PaperGeneratorWizard: React.FC<PaperGeneratorWizardProps> = ({
 }) => {
   const { currentDepartment, currentInstitution } = useDepartment();
   const { currentUser } = useAuth();
+  const { showToast } = useToast();
 
   const deptId = currentDepartment?.id || 'dept-cs';
   const availablePrograms = mockPrograms.filter(p => p.departmentId === deptId);
@@ -130,7 +132,11 @@ export const PaperGeneratorWizard: React.FC<PaperGeneratorWizardProps> = ({
     };
 
     paperService.createPaper(newPaper);
-    alert(`Examination Paper ${generatedId} saved as ${status === 'submitted' ? 'Submitted for Review' : 'Draft'} in Paper History!`);
+    showToast(
+      'Paper Saved',
+      `${generatedId} was saved as ${status === 'submitted' ? 'submitted for review' : 'draft'}.`,
+      'success'
+    );
     onNavigateHistory();
   };
 
@@ -349,14 +355,14 @@ export const PaperGeneratorWizard: React.FC<PaperGeneratorWizardProps> = ({
               <div className="flex items-center space-x-3 pt-2">
                 <button
                   type="button"
-                  onClick={() => alert('Redirecting to question creation form...')}
+                  onClick={() => showToast('Question Bank', 'Opening the question creation flow.', 'info')}
                   className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-lg shadow-sm"
                 >
                   Add Questions
                 </button>
                 <button
                   type="button"
-                  onClick={() => alert('Relaxing difficulty balance rules...')}
+                  onClick={() => showToast('Difficulty Balance', 'Difficulty balancing rules have been relaxed for this draft.', 'info')}
                   className="px-3 py-1.5 bg-white border border-rose-300 text-rose-800 font-bold text-xs rounded-lg"
                 >
                   Relax Rule
@@ -729,7 +735,7 @@ export const PaperGeneratorWizard: React.FC<PaperGeneratorWizardProps> = ({
 
               <button
                 type="button"
-                onClick={() => alert('Simulated PDF Download initiated!')}
+                onClick={() => showToast('Download Started', 'Simulated PDF export has been initiated.', 'info')}
                 className="inline-flex items-center space-x-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-brand-title text-xs font-semibold rounded-lg"
               >
                 <FileDown className="h-3.5 w-3.5" />

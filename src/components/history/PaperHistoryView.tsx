@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useToast } from '../../contexts/ToastContext';
 import { PreviousPaper, User } from '../../types';
 import { paperService } from '../../services/paperService';
 import { mockSubjects, mockDepartments } from '../../mock/academicData';
@@ -27,6 +28,7 @@ export const PaperHistoryView: React.FC<PaperHistoryViewProps> = ({
   currentUser,
   onUseAsReferenceInGenerator,
 }) => {
+  const { showToast } = useToast();
   const [papers, setPapers] = useState<PreviousPaper[]>(() => paperService.getAllPapers());
   const [searchTerm, setSearchTerm] = useState('');
   const [subjectFilter, setSubjectFilter] = useState('all');
@@ -50,7 +52,7 @@ export const PaperHistoryView: React.FC<PaperHistoryViewProps> = ({
     if (duplicateTargetPaper) {
       const draft = paperService.duplicatePaperAsNewDraft(duplicateTargetPaper.id, currentUser);
       if (draft) {
-        alert(`New paper draft created: ${draft.id} from original ${duplicateTargetPaper.id}`);
+        showToast('Draft Created', `New paper draft created: ${draft.id}`, 'success');
         setDuplicateTargetPaper(undefined);
       }
     }

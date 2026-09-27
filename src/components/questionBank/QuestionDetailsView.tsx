@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useToast } from '../../contexts/ToastContext';
 import { Question, QuestionVersion, User } from '../../types';
 import { Badge } from '../common/Badge';
 import { VersionHistoryTimeline } from './VersionHistoryTimeline';
@@ -38,6 +39,7 @@ export const QuestionDetailsView: React.FC<QuestionDetailsViewProps> = ({
   onEdit,
   onQuestionUpdated,
 }) => {
+  const { showToast } = useToast();
   const [question, setQuestion] = useState<Question | undefined>(() => questionService.getQuestionById(questionId));
   const [isCompareOpen, setIsCompareOpen] = useState(false);
   const [selectedVersionForView, setSelectedVersionForView] = useState<QuestionVersion | null>(null);
@@ -66,7 +68,7 @@ export const QuestionDetailsView: React.FC<QuestionDetailsViewProps> = ({
   const handleDuplicate = () => {
     const dup = questionService.duplicateQuestion(question.id, currentUser);
     if (dup) {
-      alert(`Question duplicated as new draft: ${dup.id}`);
+      showToast('Question Duplicated', `New draft created: ${dup.id}`, 'success');
       onQuestionUpdated();
       onBack();
     }
@@ -77,6 +79,7 @@ export const QuestionDetailsView: React.FC<QuestionDetailsViewProps> = ({
       questionService.archiveQuestion(question.id);
       setQuestion(questionService.getQuestionById(question.id));
       onQuestionUpdated();
+      showToast('Question Archived', `${question.id} has been archived.`, 'info');
     }
   };
 
@@ -84,12 +87,14 @@ export const QuestionDetailsView: React.FC<QuestionDetailsViewProps> = ({
     questionService.submitForReview(question.id, currentUser);
     setQuestion(questionService.getQuestionById(question.id));
     onQuestionUpdated();
+    showToast('Submitted for Review', `${question.id} is now awaiting approval.`, 'info');
   };
 
   const handleApprove = () => {
     questionService.approveQuestion(question.id, currentUser);
     setQuestion(questionService.getQuestionById(question.id));
     onQuestionUpdated();
+    showToast('Question Approved', `${question.id} is now approved for paper generation.`, 'success');
   };
 
   const handleRejectConfirm = () => {
@@ -99,6 +104,7 @@ export const QuestionDetailsView: React.FC<QuestionDetailsViewProps> = ({
     setRejectReason('');
     setQuestion(questionService.getQuestionById(question.id));
     onQuestionUpdated();
+    showToast('Question Rejected', `${question.id} has been returned for revision.`, 'warning');
   };
 
   return (

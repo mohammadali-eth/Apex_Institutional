@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useDepartment } from '../../contexts/DepartmentContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
 import { materialService } from '../../services/materialService';
 import { mockSubjects } from '../../mock/academicData';
 import { Material, MaterialUnit } from '../../types';
@@ -22,6 +23,7 @@ import {
 export const MaterialsView: React.FC = () => {
   const { currentDepartment } = useDepartment();
   const { currentUser } = useAuth();
+  const { showToast } = useToast();
 
   const deptId = currentDepartment?.id || 'dept-cs';
   const subjects = mockSubjects.filter(s => s.departmentId === deptId);
@@ -65,7 +67,7 @@ export const MaterialsView: React.FC = () => {
     if (activeMaterial && activeMaterial.id === id) {
       setActiveMaterial({ ...activeMaterial, status: 'approved' });
     }
-    alert('Syllabus structure approved and synchronized with Question Bank units!');
+    showToast('Syllabus Approved', 'The curriculum structure has been synchronized with the question bank.', 'success');
   };
 
   return (

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { I18nProvider } from './lib/i18n';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { DepartmentProvider, useDepartment } from './contexts/DepartmentContext';
+import { ToastProvider } from './contexts/ToastContext';
 import { AppShell } from './components/layout/AppShell';
 
 import { LoginPage } from './components/auth/LoginPage';
@@ -30,53 +31,89 @@ function MainApplication() {
   const [generatorReference, setGeneratorReference] = useState<{ id?: string; name?: string }>({});
   const [manualSelectDeptOpen, setManualSelectDeptOpen] = useState(false);
 
-  // Sync hash routing
+  // Sync hash routing with auth state and enforce a real login route.
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.replace(/^#\/?/, '');
-      if (!hash || hash === 'dashboard') setActiveNav('dashboard');
-      else if (hash === 'academic') setActiveNav('academic');
-      else if (hash === 'materials') setActiveNav('materials');
-      else if (hash === 'questions') setActiveNav('questions');
-      else if (hash === 'generator') setActiveNav('generator');
-      else if (hash === 'history') setActiveNav('history');
-      else if (hash === 'approvals') setActiveNav('approvals');
-      else if (hash === 'reports') setActiveNav('reports');
-      else if (hash === 'settings') setActiveNav('settings');
-      else if (hash === 'create-question') {
+      const route = hash || 'dashboard';
+
+      if (!isAuthenticated) {
+        if (route !== 'login') {
+          window.location.hash = 'login';
+          setActiveQuestionId(undefined);
+        }
+        setActiveNav('login');
+        return;
+      }
+
+      if (route === 'login' || !hash) {
+        window.location.hash = 'dashboard';
+        setActiveNav('dashboard');
+        setActiveQuestionId(undefined);
+        return;
+      }
+
+      if (route === 'create-question') {
         setActiveQuestionId(undefined);
         setActiveNav('edit-question');
-      } else if (hash.match(/^questions\/([^\/]+)\/edit$/)) {
-        const match = hash.match(/^questions\/([^\/]+)\/edit$/);
-        if (match) {
-          setActiveQuestionId(match[1]);
-          setActiveNav('edit-question');
-        }
-      } else if (hash.match(/^questions\/([^\/]+)$/)) {
-        const match = hash.match(/^questions\/([^\/]+)$/);
-        if (match) {
-          setActiveQuestionId(match[1]);
-          setActiveNav('view-question');
-        }
+        return;
+      }
+
+      const editMatch = route.match(/^questions\/([^\/]+)\/edit$/);
+      if (editMatch) {
+        setActiveQuestionId(editMatch[1]);
+        setActiveNav('edit-question');
+        return;
+      }
+
+      const viewMatch = route.match(/^questions\/([^\/]+)$/);
+      if (viewMatch) {
+        setActiveQuestionId(viewMatch[1]);
+        setActiveNav('view-question');
+        return;
+      }
+
+      setActiveQuestionId(undefined);
+      if (route === 'dashboard' || route === 'academic' || route === 'materials' || route === 'questions' || route === 'generator' || route === 'history' || route === 'approvals' || route === 'reports' || route === 'settings') {
+        setActiveNav(route);
+      } else {
+        setActiveNav('dashboard');
       }
     };
 
     window.addEventListener('hashchange', handleHashChange);
     handleHashChange();
     return () => window.removeEventListener('hashchange', handleHashChange);
-  }, []);
+  }, [isAuthenticated]);
 
   const navigateTo = (route: string, qId?: string) => {
+    if (!isAuthenticated && route !== 'login') {
+      window.location.hash = 'login';
+      setActiveNav('login');
+      return;
+    }
+
     setActiveNav(route);
+    if (route === 'login') {
+      window.location.hash = 'login';
+      setActiveQuestionId(undefined);
+      return;
+    }
+
     if (route === 'edit-question') {
       setActiveQuestionId(qId);
       window.location.hash = qId ? `questions/${qId}/edit` : 'create-question';
-    } else if (route === 'view-question') {
+      return;
+    }
+
+    if (route === 'view-question') {
       setActiveQuestionId(qId);
       window.location.hash = qId ? `questions/${qId}` : 'questions';
-    } else {
-      window.location.hash = route;
+      return;
     }
+
+    setActiveQuestionId(undefined);
+    window.location.hash = route;
   };
 
   const handleUseReference = (paper: PreviousPaper) => {
@@ -92,7 +129,10 @@ function MainApplication() {
     return (
       <LoginPage
         onSuccess={() => {
-          navigateTo('dashboard');
+          if (window.location.hash !== '#dashboard') {
+            window.location.hash = 'dashboard';
+          }
+          setActiveNav('dashboard');
         }}
       />
     );
@@ -205,7 +245,9 @@ export function App() {
     <I18nProvider>
       <AuthProvider>
         <DepartmentProvider>
-          <MainApplication />
+          <ToastProvider>
+            <MainApplication />
+          </ToastProvider>
         </DepartmentProvider>
       </AuthProvider>
     </I18nProvider>

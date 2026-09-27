@@ -1,34 +1,20 @@
 import { User, UserRole, AssignedDepartment } from '../types';
 import { mockUsers } from '../mock/academicData';
 import { academicService } from './academicService';
-
-const USERS_STORAGE_KEY = 'qpms_users_store';
+import { loadDemoState, saveDemoState } from '../store/demoState';
 
 const getStoredUsers = (): User[] => {
-  if (typeof window !== 'undefined' && window.localStorage) {
-    try {
-      const stored = window.localStorage.getItem(USERS_STORAGE_KEY);
-      if (stored) {
-        return JSON.parse(stored);
-      }
-    } catch (e) {
-      console.error('Failed to parse stored users:', e);
-    }
-  }
-  return [...mockUsers];
+  const state = loadDemoState();
+  return [...state.users];
 };
 
 let usersStore: User[] = getStoredUsers();
 
 const saveUsers = () => {
-  if (typeof window !== 'undefined' && window.localStorage) {
-    try {
-      window.localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(usersStore));
-      window.dispatchEvent(new Event('qpms_users_updated'));
-    } catch (e) {
-      console.error('Failed to persist users:', e);
-    }
-  }
+  const state = loadDemoState();
+  state.users = usersStore;
+  saveDemoState(state);
+  window.dispatchEvent(new Event('qpms_users_updated'));
 };
 
 export interface CreateUserDTO {

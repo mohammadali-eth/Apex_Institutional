@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useToast } from '../../contexts/ToastContext';
 import { Question, User } from '../../types';
 import { questionService } from '../../services/questionService';
 import { canUserEditQuestion } from '../../services/permissionService';
@@ -32,6 +33,7 @@ export const QuestionBankView: React.FC<QuestionBankViewProps> = ({
   onEditQuestion,
   onCreateQuestion,
 }) => {
+  const { showToast } = useToast();
   const [questions, setQuestions] = useState<Question[]>(() => questionService.getAllQuestions());
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('all');
@@ -48,13 +50,14 @@ export const QuestionBankView: React.FC<QuestionBankViewProps> = ({
   const handleDuplicate = (id: string) => {
     const copy = questionService.duplicateQuestion(id, currentUser);
     if (copy) {
-      alert(`Question duplicated as new draft (${copy.id})`);
+      showToast('Question Duplicated', `New draft created: ${copy.id}`, 'success');
     }
   };
 
   const handleArchive = (id: string) => {
     if (window.confirm('Archive this question?')) {
       questionService.archiveQuestion(id);
+      showToast('Question Archived', 'The question has been moved to the archived set.', 'info');
     }
   };
 

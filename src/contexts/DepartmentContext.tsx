@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Department, Institution } from '../types';
 import { mockDepartments, mockInstitutions } from '../mock/academicData';
 import { useAuth } from './AuthContext';
+import { loadDemoState, saveDemoState } from '../store/demoState';
 
 interface DepartmentContextType {
   currentInstitution: Institution | null;
@@ -22,7 +23,11 @@ const DepartmentContext = createContext<DepartmentContextType>({
 export const DepartmentProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { currentUser } = useAuth();
 
-  const [currentDepartment, setCurrentDepartment] = useState<Department | null>(null);
+  const [currentDepartment, setCurrentDepartment] = useState<Department | null>(() => {
+    const state = loadDemoState();
+    if (!state.activeDepartmentId) return null;
+    return mockDepartments.find(d => d.id === state.activeDepartmentId) || null;
+  });
   const [status, setStatus] = useState<'resolved' | 'requires_selection' | 'no_department'>('resolved');
 
   // Enforce Critical Login -> Department Resolution Flow (Requirement #6 & #7)
@@ -30,6 +35,9 @@ export const DepartmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (!currentUser) {
       setCurrentDepartment(null);
       setStatus('resolved');
+      const nextState = loadDemoState();
+      nextState.activeDepartmentId = null;
+      saveDemoState(nextState);
       return;
     }
 
@@ -37,6 +45,9 @@ export const DepartmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (currentUser.role === 'university_admin' || currentUser.role === 'institution_admin') {
       const defaultDept = mockDepartments[0];
       setCurrentDepartment(defaultDept);
+      const nextState = loadDemoState();
+      nextState.activeDepartmentId = defaultDept.id;
+      saveDemoState(nextState);
       setStatus('resolved');
       return;
     }
@@ -46,6 +57,9 @@ export const DepartmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     // Case 1: No department assigned
     if (assigned.length === 0) {
       setCurrentDepartment(null);
+      const nextState = loadDemoState();
+      nextState.activeDepartmentId = null;
+      saveDemoState(nextState);
       setStatus('no_department');
       return;
     }
@@ -54,6 +68,9 @@ export const DepartmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (assigned.length === 1) {
       const found = mockDepartments.find(d => d.id === assigned[0].id) || mockDepartments[0];
       setCurrentDepartment(found);
+      const nextState = loadDemoState();
+      nextState.activeDepartmentId = found.id;
+      saveDemoState(nextState);
       setStatus('resolved');
       return;
     }
@@ -61,8 +78,14 @@ export const DepartmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     // Case 3: MULTIPLE departments assigned -> Show department selection screen
     // Check if user already picked a valid department
     if (currentDepartment && assigned.some(a => a.id === currentDepartment.id)) {
+      const nextState = loadDemoState();
+      nextState.activeDepartmentId = currentDepartment.id;
+      saveDemoState(nextState);
       setStatus('resolved');
     } else {
+      const nextState = loadDemoState();
+      nextState.activeDepartmentId = null;
+      saveDemoState(nextState);
       setStatus('requires_selection');
     }
   }, [currentUser]);
@@ -75,6 +98,9 @@ export const DepartmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const dept = mockDepartments.find(d => d.id === departmentId);
     if (dept) {
       setCurrentDepartment(dept);
+      const nextState = loadDemoState();
+      nextState.activeDepartmentId = dept.id;
+      saveDemoState(nextState);
       setStatus('resolved');
     }
   };

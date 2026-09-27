@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useToast } from '../../contexts/ToastContext';
 import { Question, User, QuestionType, DifficultyLevel, QuestionLanguage, McqOption } from '../../types';
 import { mockSubjects, mockUnits, mockChapters } from '../../mock/academicData';
 import { questionService } from '../../services/questionService';
@@ -29,6 +30,7 @@ export const QuestionEditForm: React.FC<QuestionEditFormProps> = ({
   onCancel,
   onSaved,
 }) => {
+  const { showToast } = useToast();
   const isEditMode = Boolean(questionId);
   const existingQuestion = questionId ? questionService.getQuestionById(questionId) : undefined;
 
@@ -90,7 +92,7 @@ export const QuestionEditForm: React.FC<QuestionEditFormProps> = ({
 
   const handleSave = (submitImmediately: boolean) => {
     if (!text.trim()) {
-      alert('Question text cannot be empty.');
+      showToast('Validation Required', 'Question text cannot be empty.', 'warning');
       return;
     }
 
@@ -128,9 +130,17 @@ export const QuestionEditForm: React.FC<QuestionEditFormProps> = ({
     setIsDirty(false);
 
     if (isNewVersion) {
-      alert(`Version Update: A new draft version (v${saved.version}) was created for approved question ${saved.id}. It is now ${submitImmediately ? 'submitted for review' : 'saved as draft'}.`);
+      showToast(
+        'Version Update',
+        `A new draft version (v${saved.version}) was created for approved question ${saved.id}.`,
+        'info'
+      );
     } else {
-      alert(`Question ${saved.id} successfully ${submitImmediately ? 'submitted for review' : 'saved'}!`);
+      showToast(
+        'Question Saved',
+        `Question ${saved.id} was ${submitImmediately ? 'submitted for review' : 'saved'} successfully.`,
+        'success'
+      );
     }
 
     onSaved(saved.id);

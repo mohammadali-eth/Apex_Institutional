@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User } from '../types';
 import { userService } from '../services/userService';
+import { loadDemoState, saveDemoState } from '../store/demoState';
 
 interface AuthContextType {
   currentUser: User | null;
@@ -21,13 +22,14 @@ const AuthContext = createContext<AuthContextType>({
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     try {
-      const saved = localStorage.getItem('qpms_active_user');
-      if (saved) {
-        const found = userService.getUserById(saved);
+      const state = loadDemoState();
+      const savedId = state.activeUserId || localStorage.getItem('qpms_active_user');
+      if (savedId) {
+        const found = userService.getUserById(savedId);
         if (found) return found;
       }
     } catch {}
-    return userService.getUsers()[0] || null;
+    return null;
   });
 
   useEffect(() => {
@@ -43,7 +45,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = (userId: string) => {
     const user = userService.getUserById(userId) || userService.getUsers()[0];
+    if (!user) {
+      return { requiresDeptSelection: false, noDeptAssigned: false };
+    }
+
     setCurrentUser(user);
+    const nextState = loadDemoState();
+    nextState.activeUserId = user.id;
+    nextState.activeDepartmentId = user.departmentId || nextState.activeDepartmentId || null;
+    saveDemoState(nextState);
+
     try {
       localStorage.setItem('qpms_active_user', user.id);
     } catch {}
@@ -60,6 +71,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = () => {
     setCurrentUser(null);
+    const nextState = loadDemoState();
+    nextState.activeUserId = null;
+    nextState.activeDepartmentId = null;
+    saveDemoState(nextState);
+
     try {
       localStorage.removeItem('qpms_active_user');
     } catch {}
@@ -69,6 +85,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const user = userService.getUserById(userId);
     if (user) {
       setCurrentUser(user);
+      const nextState = loadDemoState();
+      nextState.activeUserId = user.id;
+      nextState.activeDepartmentId = user.departmentId || nextState.activeDepartmentId || null;
+      saveDemoState(nextState);
+
       try {
         localStorage.setItem('qpms_active_user', user.id);
       } catch {}

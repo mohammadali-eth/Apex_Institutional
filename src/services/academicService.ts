@@ -1,20 +1,10 @@
 import { Institution, Department, Program, Subject } from '../types';
 import { mockInstitutions, mockDepartments, mockPrograms, mockSubjects } from '../mock/academicData';
-
-const DEPTS_STORAGE_KEY = 'qpms_departments_store';
+import { loadDemoState, saveDemoState } from '../store/demoState';
 
 const getStoredDepartments = (): Department[] => {
-  if (typeof window !== 'undefined' && window.localStorage) {
-    try {
-      const stored = window.localStorage.getItem(DEPTS_STORAGE_KEY);
-      if (stored) {
-        return JSON.parse(stored);
-      }
-    } catch (e) {
-      console.error('Failed to parse stored departments:', e);
-    }
-  }
-  return [...mockDepartments];
+  const state = loadDemoState();
+  return [...state.departments];
 };
 
 let institutionsStore = [...mockInstitutions];
@@ -23,14 +13,10 @@ let programsStore = [...mockPrograms];
 let subjectsStore = [...mockSubjects];
 
 const saveDepartments = () => {
-  if (typeof window !== 'undefined' && window.localStorage) {
-    try {
-      window.localStorage.setItem(DEPTS_STORAGE_KEY, JSON.stringify(departmentsStore));
-      window.dispatchEvent(new Event('qpms_academic_updated'));
-    } catch (e) {
-      console.error('Failed to persist departments:', e);
-    }
-  }
+  const state = loadDemoState();
+  state.departments = departmentsStore;
+  saveDemoState(state);
+  window.dispatchEvent(new Event('qpms_academic_updated'));
 };
 
 export interface CreateDepartmentDTO {

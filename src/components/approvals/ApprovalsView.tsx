@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useDepartment } from '../../contexts/DepartmentContext';
+import { useToast } from '../../contexts/ToastContext';
 import { approvalService } from '../../services/approvalService';
 import { paperService } from '../../services/paperService';
 import { PreviousPaper } from '../../types';
@@ -11,6 +12,7 @@ import { CheckSquare, CheckCircle2, XCircle, Eye, AlertCircle, Clock } from 'luc
 export const ApprovalsView: React.FC = () => {
   const { currentUser } = useAuth();
   const { currentDepartment } = useDepartment();
+  const { showToast } = useToast();
 
   const deptId = currentDepartment?.id || 'dept-cs';
   const [papers, setPapers] = useState<PreviousPaper[]>(() => approvalService.getPapersAwaitingReview(deptId));
@@ -32,7 +34,7 @@ export const ApprovalsView: React.FC = () => {
       action: 'approve',
       remarks: 'Approved for institutional administration.',
     });
-    alert(`Examination Paper ${paperId} has been approved and moved to the Active Master Archive!`);
+    showToast('Paper Approved', `${paperId} has been moved to the active master archive.`, 'success');
   };
 
   const handleRejectConfirm = () => {
@@ -45,7 +47,7 @@ export const ApprovalsView: React.FC = () => {
     });
     setRejectPaper(undefined);
     setRemarks('');
-    alert(`Examination Paper ${rejectPaper.id} has been returned to faculty for revision.`);
+    showToast('Paper Returned', `${rejectPaper.id} has been sent back for revision.`, 'warning');
   };
 
   return (
