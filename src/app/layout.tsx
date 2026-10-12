@@ -9,7 +9,12 @@ export const metadata: Metadata = {
   title: 'Apex Institute - QPMS',
   description: 'Apex Question Paper Management System',
   icons: {
-    icon: '/favicon.ico',
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/icon.svg', type: 'image/svg+xml' },
+    ],
+    shortcut: '/favicon.svg',
+    apple: '/favicon.svg',
   },
 };
 
