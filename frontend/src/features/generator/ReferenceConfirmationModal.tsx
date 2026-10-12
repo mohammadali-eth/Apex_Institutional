@@ -61,7 +61,7 @@ export const ReferenceConfirmationModal: React.FC<ReferenceConfirmationModalProp
           <div className="flex items-start space-x-2">
             <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0 mt-0.5" />
             <span>
-              <strong>Blueprint Alignment:</strong> Adopts balanced Bloom's taxonomy & unit weightage profile.
+              <strong>Blueprint Alignment:</strong> Adopts balanced Bloom&apos;s taxonomy &amp; unit weightage profile.
             </span>
           </div>
           <div className="flex items-start space-x-2">

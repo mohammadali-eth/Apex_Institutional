@@ -85,7 +85,7 @@ export const VersionHistoryTimeline: React.FC<VersionHistoryTimelineProps> = ({
               </div>
 
               <p className="text-xs text-slate-600 line-clamp-2 italic mb-1.5 bg-white p-2 rounded border border-slate-100">
-                "{ver.text}"
+                &ldquo;{ver.text}&rdquo;
               </p>
 
               {ver.comments && (
