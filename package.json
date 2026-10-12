@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "postbuild": "node -e \"const fs=require('fs'); if(!fs.existsSync('dist')){fs.mkdirSync('dist',{recursive:true}); fs.writeFileSync('dist/index.html', '<!DOCTYPE html><html><head><meta http-equiv=\\\"refresh\\\" content=\\\"0;url=/\\\" /></head><body></body></html>');}\"",
     "start": "next start",
     "lint": "next lint"
   },
