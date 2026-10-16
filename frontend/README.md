@@ -101,3 +101,13 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 - **Strict TypeScript**: Do not use `any`; use strictly typed interfaces in `src/types/index.ts`.
 - **Styling**: Use Tailwind CSS utilities matching the institutional green palette (`brand-primary: #80c343`) and slate neutrals.
 - **Component Design**: Keep components modular, accessible, and responsive across mobile, tablet, and desktop screens.
+
+---
+
+## 6. Authentication & Session Security (Phase 2)
+
+- **Cookie-Based Sessions**: Authentication tokens are transmitted exclusively using secure `HttpOnly` cookies (`qpms_session` in dev, `__Host-qpms_session` in production HTTPS).
+- **No Browser Token Storage**: Tokens are NEVER persisted in `localStorage` or `sessionStorage`.
+- **CSRF Defense**: State-changing requests submit the CSRF token extracted from the `qpms_csrf` cookie via the `X-CSRF-Token` HTTP header (`credentials: 'include'`).
+- **Resilient Fallback**: During local development without a running backend container, `AuthProvider` gracefully falls back to local demo state.
+

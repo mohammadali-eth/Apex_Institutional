@@ -25,10 +25,38 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>
-        <AppProviders>
-          {children}
-        </AppProviders>
+      <body className={`${inter.className} min-h-screen bg-brand-bg relative antialiased`}>
+        {/* 1. Universal Architectural Blueprint Gridlines Background */}
+        <div
+          className="fixed inset-0 pointer-events-none z-0 opacity-70"
+          style={{
+            backgroundImage: `
+              linear-gradient(to right, rgba(69, 84, 92, 0.08) 1px, transparent 1px),
+              linear-gradient(to bottom, rgba(69, 84, 92, 0.08) 1px, transparent 1px)
+            `,
+            backgroundSize: '44px 44px',
+          }}
+          aria-hidden="true"
+        />
+
+        {/* 2. Universal Micro Drafting Gridlines for Academic Precision */}
+        <div
+          className="fixed inset-0 pointer-events-none z-0 opacity-30"
+          style={{
+            backgroundImage: `
+              linear-gradient(to right, rgba(128, 195, 67, 0.08) 1px, transparent 1px),
+              linear-gradient(to bottom, rgba(128, 195, 67, 0.08) 1px, transparent 1px)
+            `,
+            backgroundSize: '11px 11px',
+          }}
+          aria-hidden="true"
+        />
+
+        <div className="relative z-10 flex flex-col min-h-screen">
+          <AppProviders>
+            {children}
+          </AppProviders>
+        </div>
       </body>
     </html>
   );

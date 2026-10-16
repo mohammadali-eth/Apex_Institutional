@@ -221,7 +221,7 @@ export const AppShell: React.FC<AppShellProps> = ({
     (currentUser?.assignedDepartments?.length || 0) > 1;
 
   return (
-    <div className="min-h-screen bg-brand-bg flex flex-col">
+    <div className="min-h-screen bg-transparent flex flex-col relative">
       {/* Top Universal Examination Header */}
       <header className="bg-brand-secondary text-white sticky top-0 z-50 shadow-md">
         <div className="px-4 sm:px-6 h-14 flex items-center justify-between">

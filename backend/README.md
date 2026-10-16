@@ -121,4 +121,8 @@ Comprehensive architectural and engineering guides are located in `docs/`:
 - [`docs/ENVIRONMENT.md`](docs/ENVIRONMENT.md) — Environment variables specification and configuration hierarchy.
 - [`docs/DATABASE.md`](docs/DATABASE.md) — Async SQLAlchemy engine, session management, and Alembic workflow.
 - [`docs/API_GUIDELINES.md`](docs/API_GUIDELINES.md) — Standards for routes, schemas, status codes, and error envelopes.
+- [`docs/AUTHENTICATION_ARCHITECTURE.md`](docs/AUTHENTICATION_ARCHITECTURE.md) — Phase 2 Authentication architecture and threat model.
+- [`docs/AUTHENTICATION_SECURITY.md`](docs/AUTHENTICATION_SECURITY.md) — Argon2id password hashing and NIST SP 800-63B policy.
+- [`docs/SESSION_MANAGEMENT.md`](docs/SESSION_MANAGEMENT.md) — Opaque server-managed PostgreSQL sessions and cookie lifecycles.
+- [`docs/EMAIL_DELIVERY.md`](docs/EMAIL_DELIVERY.md) — Transactional email provider boundary (console/file/disabled sinks).
 - [`docs/FOUNDATION_SETUP_COMPLETE.md`](docs/FOUNDATION_SETUP_COMPLETE.md) — Verification checklist and foundation sign-off.

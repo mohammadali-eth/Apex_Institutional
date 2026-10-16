@@ -142,7 +142,7 @@ const ROLE_PRESETS: RolePreset[] = [
 ];
 
 export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
-  const { login } = useAuth();
+  const { login, loginWithCredentials } = useAuth();
   const { t } = useI18n();
   const { showToast } = useToast();
 
@@ -175,7 +175,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
     setPasswordError("");
   };
 
-  const handleSignIn = (e: React.FormEvent) => {
+  const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const trimmedEmail = email.trim();
@@ -203,16 +203,43 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
     setEmailError("");
     setPasswordError("");
 
-    // Determine target user
+    // 1. Attempt backend session authentication first via loginWithCredentials
+    try {
+      const backendRes = await loginWithCredentials(trimmedEmail, password);
+      if (backendRes.success) {
+        setIsLoading(false);
+        showToast(
+          "Signed In",
+          `Welcome back! (${detectedRole.roleName})`,
+          "success",
+        );
+        onSuccess(
+          backendRes.status || { requiresDeptSelection: false, noDeptAssigned: false },
+        );
+        return;
+      } else if (
+        backendRes.error &&
+        !backendRes.error.includes("Failed to fetch") &&
+        !backendRes.error.includes("NetworkError")
+      ) {
+        // Explicit backend authentication rejection
+        setIsLoading(false);
+        setPasswordError(backendRes.error);
+        showToast("Authentication Failed", backendRes.error, "error");
+        return;
+      }
+    } catch {
+      // Backend not running; fall back to local demo state below
+    }
+
+    // 2. Demo fallback for local development when backend is offline
     const allUsers = userService.getUsers();
     let targetUserId = detectedRole.userId;
 
-    // Check if the user specifically typed a matching email for an individual account
     const matchedByEmail = allUsers.find(
       (u) => u.email.toLowerCase() === trimmedEmail.toLowerCase(),
     );
 
-    // If an existing email was typed and password wasn't a specific other role password
     const isSpecificRolePassword = ROLE_PRESETS.some((preset) =>
       preset.aliases.some(
         (alias) => alias.toLowerCase() === password.trim().toLowerCase(),
@@ -223,7 +250,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
       targetUserId = matchedByEmail.id;
     }
 
-    // Verify user exists in repository
     const targetUser =
       allUsers.find((u) => u.id === targetUserId) || allUsers[0];
 

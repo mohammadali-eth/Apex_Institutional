@@ -20,6 +20,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         request_id = getattr(request.state, "request_id", "-")
         return JSONResponse(
             status_code=exc.status_code,
+            headers=getattr(exc, "headers", None),
             content={
                 "error": {
                     "code": f"HTTP_{exc.status_code}",

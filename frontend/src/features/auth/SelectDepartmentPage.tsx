@@ -25,7 +25,7 @@ export const SelectDepartmentPage: React.FC<SelectDepartmentPageProps> = ({ onSe
   };
 
   return (
-    <div className="min-h-screen bg-brand-bg flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-transparent flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 relative z-10">
       <div className="max-w-xl mx-auto w-full">
         <div className="bg-white rounded-2xl shadow-xl p-8 border border-slate-200">
           <div className="flex items-center space-x-3 pb-4 border-b border-slate-100">

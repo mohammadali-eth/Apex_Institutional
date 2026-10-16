@@ -17,7 +17,7 @@ export default function RootPage() {
   }, [isAuthenticated, router]);
 
   return (
-    <div className="flex h-screen items-center justify-center bg-brand-bg">
+    <div className="flex h-screen items-center justify-center bg-transparent relative z-10">
       <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-primary border-t-transparent" />
     </div>
   );

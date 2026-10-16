@@ -90,3 +90,23 @@ Every incoming request passes through `RequestIdMiddleware`.
 - If the incoming request has an `X-Request-ID` header, that value is propagated.
 - If absent, a new UUID v4 is generated.
 - The `X-Request-ID` header is attached to the HTTP response and included in all server log messages for cross-service diagnostics.
+
+---
+
+## 6. Authentication & Session Endpoints (`/api/v1/auth`)
+
+All authentication operations are stateful, opaque-session-based, and transmitted via `HttpOnly` cookies.
+
+| Endpoint | Method | Auth Required | CSRF Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `/api/v1/auth/csrf` | `GET` | No | No | Issues fresh CSRF token and sets `qpms_csrf` double-submit cookie. |
+| `/api/v1/auth/login` | `POST` | No | No | Authenticates credentials with Argon2id; issues opaque session cookie. |
+| `/api/v1/auth/logout` | `POST` | Yes | Yes | Revokes active session and deletes session cookie. |
+| `/api/v1/auth/logout-all` | `POST` | Yes | Yes | Revokes all active sessions for current user and clears cookie. |
+| `/api/v1/auth/me` | `GET` | Yes | No | Returns safe user identity (`id`, `email`, `status`, `created_at`, `last_login_at`). |
+| `/api/v1/auth/change-password` | `POST` | Yes | Yes | Updates password, revokes existing sessions, rotates current session. |
+| `/api/v1/auth/forgot-password` | `POST` | No | No | Initiates recovery; sends single-use token. Resilient to email enumeration. |
+| `/api/v1/auth/reset-password` | `POST` | No | No | Consumes recovery token atomically, sets password, revokes sessions. |
+| `/api/v1/auth/verify-email` | `POST` | No | No | Consumes verification token and sets `email_verified_at` & `status=active`. |
+| `/api/v1/auth/resend-verification` | `POST` | No | No | Resends verification token. Resilient to account enumeration. |
+

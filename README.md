@@ -269,6 +269,7 @@ alembic downgrade -1
 ## 13. Documentation Index
 
 - **[System Architecture](docs/architecture/SYSTEM_ARCHITECTURE.md)** — Architectural topology, security, and multi-tenancy model.
+- **[Phase 2 Authentication Report](docs/architecture/PHASE_2_AUTHENTICATION_COMPLETE.md)** — Phase 2 Authentication, user identity, and session management architecture.
 - **[Repository Audit Baseline](docs/architecture/REPOSITORY_AUDIT.md)** — Pre-standardization inspection, findings, and migration map.
 - **[Local Development Guide](docs/development/LOCAL_DEVELOPMENT.md)** — Detailed multi-service onboarding and workflow instructions.
 - **[Coding Standards & DoD](docs/standards/CODING_STANDARDS.md)** — Code quality, Conventional Commits, and PR checklist.

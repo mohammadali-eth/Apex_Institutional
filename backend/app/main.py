@@ -22,6 +22,7 @@ from app.middleware.request_id import RequestIdMiddleware
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     """Application startup and graceful shutdown lifecycle."""
     setup_logging()
+    settings.validate_production_security()
     logger.info(
         "Initializing %s (v%s) in [%s] mode",
         settings.app_name,

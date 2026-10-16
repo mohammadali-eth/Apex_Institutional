@@ -14,7 +14,7 @@ export const NoDepartmentPage: React.FC<NoDepartmentPageProps> = ({ onLogout, on
   const { t } = useI18n();
 
   return (
-    <div className="min-h-screen bg-brand-bg flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-transparent flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 relative z-10">
       <div className="max-w-md mx-auto w-full">
         <div className="bg-white rounded-2xl shadow-xl p-8 border border-slate-200 text-center">
           <div className="w-14 h-14 bg-rose-50 border border-rose-200 rounded-full flex items-center justify-center mx-auto mb-4 text-rose-600">
