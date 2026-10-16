@@ -1,4 +1,4 @@
-"""FastAPI dependencies for authentication, sessions, and request validation."""
+import uuid
 
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -62,3 +62,43 @@ async def get_current_active_user(
 def require_csrf(request: Request) -> None:
     """Dependency enforcing CSRF protection on state-changing requests."""
     verify_csrf(request)
+
+
+async def require_super_admin(
+    user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> User:
+    """Dependency enforcing that caller has an active platform-level Super Admin role."""
+    from app.services.role_service import role_service
+
+    is_super = await role_service.is_super_admin(db, user.id)
+    if not is_super:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied. Super Administrator privileges required.",
+        )
+    return user
+
+
+async def require_university_admin(
+    user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> tuple[User, uuid.UUID | None]:
+    """Dependency enforcing caller is a University Admin or Super Admin.
+
+    Returns:
+        (user, authorized_university_id) - Note: university_id is None for platform Super Admins.
+    """
+    from app.services.role_service import role_service
+
+    is_super = await role_service.is_super_admin(db, user.id)
+    if is_super:
+        return user, None
+
+    authorized_univ = await role_service.get_authorized_university_id(db, user.id)
+    if not authorized_univ:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied. University Administrator privileges required.",
+        )
+    return user, authorized_univ

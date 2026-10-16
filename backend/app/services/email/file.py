@@ -31,7 +31,7 @@ class FileEmailProvider(BaseEmailProvider):
             entry = (
                 f"[{datetime.now(UTC).isoformat()}] TO: {to_email} | SUBJECT: {subject}\n"
                 f"{body_text}\n"
-                f"{'-'*40}\n"
+                f"{'-' * 40}\n"
             )
             with open(self.file_path, "a", encoding="utf-8") as f:
                 f.write(entry)

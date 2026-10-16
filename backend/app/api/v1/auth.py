@@ -31,8 +31,10 @@ from app.schemas.auth import (
     UserResponse,
     VerifyEmailRequest,
 )
+from app.schemas.role import AcceptInvitationRequest, VerifyInvitationResponse
 from app.services.audit_service import audit_service
 from app.services.auth_service import auth_service
+from app.services.role_service import role_service
 from app.services.session_service import session_service
 
 auth_router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -90,7 +92,23 @@ async def login(
     csrf_token = generate_csrf_token()
     set_csrf_cookie(response, csrf_token)
 
-    return UserResponse.model_validate(user)
+    assignments = await role_service.get_user_role_assignments(db, user.id, active_only=True)
+    portal_route, primary_role = role_service.resolve_portal_routing(assignments)
+    serialized_roles = role_service.serialize_role_assignments(assignments)
+
+    return UserResponse(
+        id=user.id,
+        email=user.email,
+        full_name=user.full_name,
+        status=user.status,
+        email_verified_at=user.email_verified_at,
+        created_at=user.created_at,
+        last_login_at=user.last_login_at,
+        roles=serialized_roles,
+        active_role=primary_role,
+        portal_route=portal_route,
+        must_change_password=user.password_changed_at is None,
+    )
 
 
 @auth_router.post(
@@ -148,9 +166,80 @@ async def logout_all(
 
 
 @auth_router.get("/me", response_model=UserResponse, summary="Current User Identity")
-async def get_me(user: User = Depends(get_current_user)) -> UserResponse:
-    """Retrieve safe identity fields of the authenticated session."""
-    return UserResponse.model_validate(user)
+async def get_me(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> UserResponse:
+    """Retrieve safe identity fields and resolved role context of the authenticated session."""
+    assignments = await role_service.get_user_role_assignments(db, user.id, active_only=True)
+    portal_route, primary_role = role_service.resolve_portal_routing(assignments)
+    serialized_roles = role_service.serialize_role_assignments(assignments)
+
+    return UserResponse(
+        id=user.id,
+        email=user.email,
+        full_name=user.full_name,
+        status=user.status,
+        email_verified_at=user.email_verified_at,
+        created_at=user.created_at,
+        last_login_at=user.last_login_at,
+        roles=serialized_roles,
+        active_role=primary_role,
+        portal_route=portal_route,
+        must_change_password=user.password_changed_at is None,
+    )
+
+
+@auth_router.get(
+    "/invitation/verify",
+    response_model=VerifyInvitationResponse,
+    summary="Verify Staff Invitation Token",
+)
+async def verify_invitation(
+    token: str,
+    db: AsyncSession = Depends(get_db_session),
+) -> VerifyInvitationResponse:
+    """Validate invitation token and return organization details for activation."""
+    inv, error = await role_service.verify_invitation_token(db, token)
+    if not inv or error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error or "Invalid or expired invitation token.",
+        )
+    return VerifyInvitationResponse(
+        valid=True,
+        email=inv.email,
+        role_code=inv.role.code,
+        role_name=inv.role.name,
+        university_name=inv.university.name,
+        expires_at=inv.expires_at,
+    )
+
+
+@auth_router.post(
+    "/invitation/accept",
+    response_model=MessageResponse,
+    summary="Accept Invitation and Activate Account",
+)
+async def accept_invitation(
+    payload: AcceptInvitationRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db_session),
+) -> MessageResponse:
+    """Consume invitation token, establish password, and activate account."""
+    user, error = await role_service.accept_staff_invitation(
+        db=db,
+        raw_token=payload.token,
+        password=payload.password,
+        full_name=payload.full_name,
+        request=request,
+    )
+    if not user or error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error or "Failed to activate invitation.",
+        )
+    return MessageResponse(message="Account successfully activated. You may now sign in.")
 
 
 @auth_router.post(

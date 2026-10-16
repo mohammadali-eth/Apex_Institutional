@@ -1,7 +1,15 @@
 """Models package exporting all authentication and identity entities."""
 
 from app.models.audit import AuthenticationAuditEvent
-from app.models.enums import AuditEventType, UserStatus
+from app.models.enums import (
+    AuditEventType,
+    InvitationStatus,
+    OrganizationStatus,
+    RoleCode,
+    UserStatus,
+)
+from app.models.organization import Department, Institution, University
+from app.models.role import Role, StaffInvitation, UserRoleAssignment
 from app.models.session import UserSession
 from app.models.token import EmailVerificationToken, PasswordResetToken
 from app.models.user import User
@@ -12,6 +20,15 @@ __all__ = [
     "EmailVerificationToken",
     "PasswordResetToken",
     "AuthenticationAuditEvent",
+    "University",
+    "Institution",
+    "Department",
+    "Role",
+    "UserRoleAssignment",
+    "StaffInvitation",
     "UserStatus",
+    "RoleCode",
+    "OrganizationStatus",
+    "InvitationStatus",
     "AuditEventType",
 ]

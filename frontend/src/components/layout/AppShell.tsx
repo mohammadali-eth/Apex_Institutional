@@ -24,6 +24,7 @@ import {
   ShieldCheck,
   UserCheck,
   CalendarDays,
+  School,
 } from "lucide-react";
 
 interface AppShellProps {
@@ -39,7 +40,7 @@ export const AppShell: React.FC<AppShellProps> = ({
   onNavigate,
   onOpenSelectDepartment,
 }) => {
-  const { currentUser, logout, switchUser } = useAuth();
+  const { currentUser, backendUser, logout, switchUser } = useAuth();
   const { currentDepartment, availableDepartments, setDepartment } =
     useDepartment();
   const { locale, setLocale, isRtl, t } = useI18n();
@@ -49,6 +50,37 @@ export const AppShell: React.FC<AppShellProps> = ({
   const [showUserMenu, setShowUserMenu] = useState(false);
 
   const navItems = [
+    {
+      id: "super-admin",
+      label: "Super Admin Portal",
+      icon: ShieldCheck,
+      allowed: () =>
+        backendUser?.primary_role === "SUPER_ADMIN" ||
+        backendUser?.role_assignments?.some(
+          (r: { role_code: string }) => r.role_code === "SUPER_ADMIN",
+        ) ||
+        currentUser?.role === "super_admin",
+    },
+    {
+      id: "university-admin",
+      label: "University Admin Portal",
+      icon: School,
+      allowed: () =>
+        backendUser?.primary_role === "UNIVERSITY_ADMIN" ||
+        backendUser?.primary_role === "SUPER_ADMIN" ||
+        backendUser?.role_assignments?.some(
+          (r: { role_code: string }) =>
+            r.role_code === "UNIVERSITY_ADMIN" || r.role_code === "SUPER_ADMIN",
+        ) ||
+        currentUser?.role === "university_admin" ||
+        currentUser?.role === "super_admin",
+    },
+    {
+      id: "workspace",
+      label: "My Workspace",
+      icon: Layers,
+      allowed: () => !!currentUser || !!backendUser,
+    },
     {
       id: "dashboard",
       label: t("nav.dashboard"),

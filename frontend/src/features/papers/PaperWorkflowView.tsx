@@ -31,7 +31,7 @@ export const PaperWorkflowView: React.FC<{ page?: Page }> = ({ page: initialPage
   const state = loadDemoState();
   const user = currentUser as User | null;
   useEffect(() => setPage(initialPage), [initialPage]);
-  useEffect(() => paperService.subscribe(() => { const next = paperService.getAllPapers(); setPapers(next); if (selectedPaper) setSelectedPaper(next.find(p => p.id === selectedPaper.id)); }), [selectedPaper?.id]);
+  useEffect(() => paperService.subscribe(() => { const next = paperService.getAllPapers(); setPapers(next); setSelectedPaper(prev => (prev ? next.find(p => p.id === prev.id) : undefined)); }), []);
 
   const scopedPapers = papers.filter(p => user && permissionService.canAccessResource(user, { departmentId: p.departmentId, subjectId: p.subjectId, examId: p.examId }) && (user.role !== 'student' || p.workflowStatus === 'PUBLISHED'));
   const visiblePapers = useMemo(() => {

@@ -61,9 +61,7 @@ async def test_get_csrf_token(async_client: AsyncClient) -> None:
     assert settings.auth_csrf_cookie_name in res.cookies
 
 
-async def test_login_success_and_cookies(
-    async_client: AsyncClient, seeded_user: User
-) -> None:
+async def test_login_success_and_cookies(async_client: AsyncClient, seeded_user: User) -> None:
     res = await async_client.post(
         "/api/v1/auth/login",
         json={"email": seeded_user.email, "password": "SuperSecret#2026Password"},
@@ -82,9 +80,7 @@ async def test_login_success_and_cookies(
     assert settings.auth_csrf_cookie_name in res.cookies
 
 
-async def test_login_invalid_password(
-    async_client: AsyncClient, seeded_user: User
-) -> None:
+async def test_login_invalid_password(async_client: AsyncClient, seeded_user: User) -> None:
     res = await async_client.post(
         "/api/v1/auth/login",
         json={"email": seeded_user.email, "password": "WrongPassword1234"},
@@ -104,9 +100,7 @@ async def test_login_disabled_account_rejected(
     assert "disabled" in res.json()["error"]["message"].lower()
 
 
-async def test_get_me_authenticated(
-    async_client: AsyncClient, seeded_user: User
-) -> None:
+async def test_get_me_authenticated(async_client: AsyncClient, seeded_user: User) -> None:
     # 1. Login
     login_res = await async_client.post(
         "/api/v1/auth/login",
@@ -183,9 +177,7 @@ async def test_change_password_with_valid_csrf(
     assert succ_res.status_code == 200
 
 
-async def test_logout_revokes_session(
-    async_client: AsyncClient, seeded_user: User
-) -> None:
+async def test_logout_revokes_session(async_client: AsyncClient, seeded_user: User) -> None:
     # 1. Login
     login_res = await async_client.post(
         "/api/v1/auth/login",
@@ -262,9 +254,7 @@ async def test_password_recovery_and_reset_flow(
     assert replay_res.status_code == 400
 
 
-async def test_email_verification_flow(
-    async_client: AsyncClient, db_session: AsyncSession
-) -> None:
+async def test_email_verification_flow(async_client: AsyncClient, db_session: AsyncSession) -> None:
     # Create unverified user
     unverified = await auth_service.provision_user(
         db_session,
@@ -301,9 +291,7 @@ async def test_email_verification_flow(
     assert unverified.email_verified_at is not None
 
 
-async def test_login_rate_limiting(
-    async_client: AsyncClient, seeded_user: User
-) -> None:
+async def test_login_rate_limiting(async_client: AsyncClient, seeded_user: User) -> None:
     # Settings configure auth_rate_limit_login_attempts = 5
     for _ in range(settings.auth_rate_limit_login_attempts):
         await async_client.post(
@@ -320,9 +308,7 @@ async def test_login_rate_limiting(
     assert "Retry-After" in res.headers
 
 
-async def test_login_locked_account_rejected(
-    async_client: AsyncClient, locked_user: User
-) -> None:
+async def test_login_locked_account_rejected(async_client: AsyncClient, locked_user: User) -> None:
     res = await async_client.post(
         "/api/v1/auth/login",
         json={"email": locked_user.email, "password": "SuperSecret#2026Password"},
@@ -331,9 +317,7 @@ async def test_login_locked_account_rejected(
     assert "locked" in res.json()["error"]["message"].lower()
 
 
-async def test_logout_all_endpoint(
-    async_client: AsyncClient, seeded_user: User
-) -> None:
+async def test_logout_all_endpoint(async_client: AsyncClient, seeded_user: User) -> None:
     # 1. Login session 1
     res1 = await async_client.post(
         "/api/v1/auth/login",
@@ -355,9 +339,7 @@ async def test_logout_all_endpoint(
     assert me_res.status_code == 401
 
 
-async def test_resend_verification_endpoint(
-    async_client: AsyncClient, seeded_user: User
-) -> None:
+async def test_resend_verification_endpoint(async_client: AsyncClient, seeded_user: User) -> None:
     # Existent user
     res1 = await async_client.post(
         "/api/v1/auth/resend-verification",
@@ -420,16 +402,12 @@ async def test_user_email_uniqueness_db_constraint(
     await db_session.rollback()
 
 
-async def test_user_foreign_key_cascades(
-    db_session: AsyncSession, seeded_user: User
-) -> None:
+async def test_user_foreign_key_cascades(db_session: AsyncSession, seeded_user: User) -> None:
     from app.services.session_service import session_service
     from sqlalchemy import select
 
     # Create session for seeded_user
-    session_rec, _ = await session_service.create_session(
-        db_session, user_id=seeded_user.id
-    )
+    session_rec, _ = await session_service.create_session(db_session, user_id=seeded_user.id)
 
     # Delete user
     await db_session.delete(seeded_user)
@@ -438,6 +416,7 @@ async def test_user_foreign_key_cascades(
 
     # Session record must cascade delete
     from app.models.session import UserSession
+
     stmt = select(UserSession).where(UserSession.id == session_rec.id)
     res = await db_session.execute(stmt)
     assert res.scalar_one_or_none() is None
@@ -455,3 +434,33 @@ def test_production_security_validation() -> None:
     with pytest.raises(ValueError, match="Production configuration violation"):
         insecure_settings.validate_production_security()
 
+
+@pytest.mark.asyncio
+async def test_university_admin_login_flow(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """University Admin provisions via bootstrap and logs in with 'admin' / 'admin123'."""
+    from app.commands.bootstrap import run_university_admin_bootstrap
+
+    # 1. Bootstrap University Admin
+    await run_university_admin_bootstrap(
+        username="admin",
+        password="admin123",
+        university_code="APEX-UNIV",
+        env="development",
+        session=db_session,
+    )
+
+    # 2. Login using username 'admin'
+    res = await async_client.post(
+        "/api/v1/auth/login",
+        json={"email": "admin", "password": "admin123"},
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["email"] == "admin@apex.edu"
+    assert data["must_change_password"] is True
+    assert data["active_role"] == "UNIVERSITY_ADMIN"
+    assert data["portal_route"] == "/university-admin"
+    assert "qpms_session" in res.cookies

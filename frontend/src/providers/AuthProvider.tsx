@@ -18,6 +18,7 @@ export interface AuthContextType {
   ) => Promise<{
     success: boolean;
     error?: string;
+    portalRoute?: string;
     status?: { requiresDeptSelection: boolean; noDeptAssigned: boolean };
   }>;
   logout: () => Promise<void>;
@@ -114,11 +115,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         return {
           success: true,
+          portalRoute: authRes.portal_route,
           status: { requiresDeptSelection, noDeptAssigned },
         };
       }
 
-      return { success: true };
+      return { success: true, portalRoute: authRes.portal_route };
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Authentication failed';
       return { success: false, error: message };

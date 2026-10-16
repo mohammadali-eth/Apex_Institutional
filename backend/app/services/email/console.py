@@ -18,7 +18,9 @@ class ConsoleEmailProvider(BaseEmailProvider):
         body_text: str,
     ) -> bool:
         if settings.is_production:
-            logger.error("ConsoleEmailProvider invoked in production! Production email delivery provider is unconfigured.")
+            logger.error(
+                "ConsoleEmailProvider invoked in production! Production email delivery provider is unconfigured."
+            )
             return False
 
         logger.info(

@@ -7,14 +7,52 @@
  * Tokens are NEVER stored in localStorage or sessionStorage.
  */
 
+import { env } from '@/lib/env';
+
+export interface UserRoleAssignmentResponse {
+  id: string;
+  role_id: string;
+  role_code: string;
+  role_name: string;
+  university_id?: string | null;
+  university_name?: string | null;
+  institution_id?: string | null;
+  institution_name?: string | null;
+  department_id?: string | null;
+  department_name?: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
 export interface AuthUserResponse {
   id: string;
   email: string;
+  username?: string;
+  full_name?: string | null;
   status: 'pending_verification' | 'active' | 'locked' | 'disabled';
   email_verified_at: string | null;
   created_at: string;
   last_login_at: string | null;
+  roles?: UserRoleAssignmentResponse[];
+  role_assignments?: UserRoleAssignmentResponse[];
+  active_role?: string | null;
+  primary_role?: string | null;
+  portal_route?: string;
 }
+
+export interface VerifyInvitationResponse {
+  valid: boolean;
+  email: string;
+  role_code: string;
+  role_name: string;
+  university_name: string;
+  institution_name?: string | null;
+  department_name?: string | null;
+  expires_at: string;
+  full_name?: string | null;
+}
+
+export type InvitationVerificationResponse = VerifyInvitationResponse;
 
 export interface ApiMessageResponse {
   message: string;
@@ -34,8 +72,7 @@ class AuthService {
   private cachedCsrfToken: string | null = null;
 
   constructor() {
-    this.baseUrl =
-      process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+    this.baseUrl = env.NEXT_PUBLIC_API_URL;
   }
 
   /**
@@ -262,6 +299,49 @@ class AuthService {
       throw new Error(
         err.error?.message || 'Resend verification request failed'
       );
+    }
+    return res.json();
+  }
+
+  /**
+   * Validate a staff invitation token preview
+   */
+  async verifyInvitation(token: string): Promise<VerifyInvitationResponse> {
+    const res = await fetch(
+      `${this.baseUrl}/auth/invitation/verify?token=${encodeURIComponent(token)}`,
+      {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        credentials: 'include',
+      }
+    );
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error?.message || 'Invalid or expired invitation token');
+    }
+    return res.json();
+  }
+
+  /**
+   * Consume an invitation token and establish initial credentials
+   */
+  async acceptInvitation(payload: {
+    token: string;
+    password: string;
+    full_name?: string;
+    username?: string;
+  }): Promise<ApiMessageResponse> {
+    const res = await fetch(`${this.baseUrl}/auth/invitation/accept`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error?.message || 'Failed to activate staff invitation');
     }
     return res.json();
   }

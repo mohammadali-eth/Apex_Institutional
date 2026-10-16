@@ -11,6 +11,7 @@ from app.db.base import Base, TimestampMixin
 from app.models.enums import UserStatus
 
 if TYPE_CHECKING:
+    from app.models.role import StaffInvitation, UserRoleAssignment
     from app.models.session import UserSession
     from app.models.token import EmailVerificationToken, PasswordResetToken
 
@@ -40,6 +41,10 @@ class User(Base, TimestampMixin):
         default=UserStatus.PENDING_VERIFICATION,
         nullable=False,
         index=True,
+    )
+    full_name: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
     )
     email_verified_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
@@ -77,7 +82,22 @@ class User(Base, TimestampMixin):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
-
-    __table_args__ = (
-        Index("ix_users_email_lower", email),
+    role_assignments: Mapped[list["UserRoleAssignment"]] = relationship(
+        "UserRoleAssignment",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        foreign_keys="UserRoleAssignment.user_id",
     )
+    created_role_assignments: Mapped[list["UserRoleAssignment"]] = relationship(
+        "UserRoleAssignment",
+        back_populates="assigned_by",
+        foreign_keys="UserRoleAssignment.assigned_by_user_id",
+    )
+    created_invitations: Mapped[list["StaffInvitation"]] = relationship(
+        "StaffInvitation",
+        back_populates="invited_by",
+        foreign_keys="StaffInvitation.invited_by_user_id",
+    )
+
+    __table_args__ = (Index("ix_users_email_lower", email),)

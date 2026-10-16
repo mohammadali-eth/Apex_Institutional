@@ -84,7 +84,7 @@ export const QuestionEditForm: React.FC<QuestionEditFormProps> = ({
     }
     const nextTopics = academic.topics.filter(topic => topic.unitId === unitId);
     if (nextTopics.length && !nextTopics.some(topic => topic.id === topicId)) setTopicId(nextTopics[0].id);
-  }, [subjectId, unitId, topicId]);
+  }, [subjectId, unitId, topicId, academic.units, academic.topics]);
 
   const handleCancelClick = () => {
     if (isDirty) {

@@ -88,7 +88,9 @@ def validate_password_policy(password: str) -> str | None:
     if len(password) > MAX_PASSWORD_LENGTH:
         return f"Password must not exceed {MAX_PASSWORD_LENGTH} characters."
     if password.lower() in COMMONLY_COMPROMISED_PASSWORDS:
-        return "Password is too common or easily guessable. Please choose a more complex passphrase."
+        return (
+            "Password is too common or easily guessable. Please choose a more complex passphrase."
+        )
     return None
 
 
@@ -112,4 +114,3 @@ def ensure_utc(dt: datetime) -> datetime:
     if dt.tzinfo is None:
         return dt.replace(tzinfo=UTC)
     return dt.astimezone(UTC)
-

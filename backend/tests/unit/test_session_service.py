@@ -24,9 +24,7 @@ async def sample_user(db_session: AsyncSession) -> User:
     return user
 
 
-async def test_create_and_validate_session(
-    db_session: AsyncSession, sample_user: User
-) -> None:
+async def test_create_and_validate_session(db_session: AsyncSession, sample_user: User) -> None:
     session_record, raw_token = await session_service.create_session(
         db_session,
         user_id=sample_user.id,
@@ -45,9 +43,7 @@ async def test_create_and_validate_session(
     assert v_user.id == sample_user.id
 
 
-async def test_session_absolute_expiration(
-    db_session: AsyncSession, sample_user: User
-) -> None:
+async def test_session_absolute_expiration(db_session: AsyncSession, sample_user: User) -> None:
     session_record, raw_token = await session_service.create_session(
         db_session,
         user_id=sample_user.id,
@@ -91,9 +87,7 @@ async def test_session_revocation(db_session: AsyncSession, sample_user: User) -
     assert validated is None
 
 
-async def test_revoke_all_user_sessions(
-    db_session: AsyncSession, sample_user: User
-) -> None:
+async def test_revoke_all_user_sessions(db_session: AsyncSession, sample_user: User) -> None:
     _, token1 = await session_service.create_session(db_session, user_id=sample_user.id)
     _, token2 = await session_service.create_session(db_session, user_id=sample_user.id)
 
@@ -118,9 +112,7 @@ async def test_session_rotation(db_session: AsyncSession, sample_user: User) -> 
     assert await session_service.validate_session(db_session, new_token) is not None
 
 
-async def test_disabled_user_session_rejection(
-    db_session: AsyncSession, sample_user: User
-) -> None:
+async def test_disabled_user_session_rejection(db_session: AsyncSession, sample_user: User) -> None:
     _, token = await session_service.create_session(db_session, user_id=sample_user.id)
 
     # Disable user account

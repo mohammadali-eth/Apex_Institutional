@@ -67,6 +67,4 @@ class UserSession(Base):
     # Relationship
     user: Mapped["User"] = relationship("User", back_populates="sessions")
 
-    __table_args__ = (
-        Index("ix_user_sessions_lookup", token_hash, revoked_at, expires_at),
-    )
+    __table_args__ = (Index("ix_user_sessions_lookup", token_hash, revoked_at, expires_at),)

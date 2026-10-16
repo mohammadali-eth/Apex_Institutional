@@ -23,6 +23,7 @@ interface LoginPageProps {
   onSuccess: (status: {
     requiresDeptSelection: boolean;
     noDeptAssigned: boolean;
+    portalRoute?: string;
   }) => void;
 }
 
@@ -173,6 +174,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
     setSelectedRolePreset(preset);
     setPassword(preset.password);
     setPasswordError("");
+    if (preset.id === "admin") {
+      setEmail("admin");
+    }
   };
 
   const handleSignIn = async (e: React.FormEvent) => {
@@ -185,11 +189,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
       return;
     }
 
-    if (!trimmedEmail.includes("@") || !trimmedEmail.includes(".")) {
+    const isAdministrativeUsername = trimmedEmail.toLowerCase() === "admin";
+    if (!isAdministrativeUsername && (!trimmedEmail.includes("@") || !trimmedEmail.includes("."))) {
       setEmailError(
-        "Please enter a valid email address (e.g. portal@maktabah.edu).",
+        "Please enter a valid email address (e.g. portal@maktabah.edu) or administrative username.",
       );
-      showToast("Invalid email", "Format must be name@domain.edu", "warning");
+      showToast("Invalid identifier", "Enter a valid email address or 'admin'", "warning");
       return;
     }
 
@@ -213,9 +218,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
           `Welcome back! (${detectedRole.roleName})`,
           "success",
         );
-        onSuccess(
-          backendRes.status || { requiresDeptSelection: false, noDeptAssigned: false },
-        );
+        onSuccess({
+          ...(backendRes.status || { requiresDeptSelection: false, noDeptAssigned: false }),
+          portalRoute: backendRes.portalRoute,
+        });
         return;
       } else if (
         backendRes.error &&
@@ -318,6 +324,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
         aria-hidden="true"
       >
         <div className="relative w-full max-w-[2400px] flex justify-center items-end">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={loginBg}
             alt="Maktabah Jafariyah Gateway"

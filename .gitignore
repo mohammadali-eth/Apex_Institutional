@@ -63,6 +63,9 @@ lerna-debug.log*
 # Database & Runtime Artifacts
 *.sqlite3
 *.db
+uploads/
+data/
+backend/data/
 
 # Operating System Files
 .DS_Store

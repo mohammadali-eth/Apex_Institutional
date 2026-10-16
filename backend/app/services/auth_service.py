@@ -29,9 +29,15 @@ class AuthService:
     """Orchestrates credential verification, token lifecycles, and identity events."""
 
     async def get_user_by_email(self, db: AsyncSession, email: str) -> User | None:
-        """Query user identity by normalized email."""
+        """Query user identity by normalized email or administrative username."""
         normalized = normalize_email(email)
-        stmt = select(User).where(User.email == normalized)
+        candidates = [normalized]
+        if normalized == "admin":
+            candidates.append("admin@apex.edu")
+        elif normalized == "admin@apex.edu":
+            candidates.append("admin")
+
+        stmt = select(User).where(User.email.in_(candidates))
         result = await db.execute(stmt)
         return result.scalar_one_or_none()
 

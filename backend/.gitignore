@@ -35,9 +35,11 @@ build/
 dist/
 *.egg-info/
 
-# Logs
+# Logs & Runtime Data
 *.log
 logs/
+data/
+uploads/
 
 # Operating system artifacts
 .DS_Store

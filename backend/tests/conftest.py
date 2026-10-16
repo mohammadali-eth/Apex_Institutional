@@ -34,6 +34,7 @@ def set_sqlite_pragma(dbapi_connection, _connection_record):
     cursor.execute("PRAGMA foreign_keys=ON")
     cursor.close()
 
+
 TestingSessionLocal = async_sessionmaker(
     bind=test_engine,
     class_=AsyncSession,

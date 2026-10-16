@@ -32,7 +32,9 @@ class AuditService:
         if request:
             ip_address = request.client.host if request.client else None
             user_agent = request.headers.get("user-agent", "")[:512]
-            request_id = getattr(request.state, "request_id", None) or request.headers.get("x-request-id")
+            request_id = getattr(request.state, "request_id", None) or request.headers.get(
+                "x-request-id"
+            )
 
         now = datetime.now(UTC)
         event = AuthenticationAuditEvent(

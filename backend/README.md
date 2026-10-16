@@ -12,20 +12,19 @@ The backend uses a clean, layered enterprise architecture designed for high scal
 backend/
 ├── app/
 │   ├── api/v1/          # Route handlers & API versioning
+│   ├── commands/        # Controlled administrative commands (bootstrap)
 │   ├── core/            # Configuration, logging, security, custom exceptions
 │   ├── db/              # Async database engine, session lifecycle, base model, health
 │   ├── middleware/      # Request correlation ID, logging, error handling
-│   ├── models/          # Declarative SQLAlchemy ORM models (reserved for future domain entities)
-│   ├── repositories/    # Data access layer abstractions
+│   ├── models/          # Declarative SQLAlchemy ORM models
 │   ├── schemas/         # Pydantic v2 request & response contracts
 │   ├── services/        # Business logic layer
 │   └── main.py          # FastAPI application factory & lifespan
 ├── alembic/             # Async database schema migrations
 ├── tests/               # Pytest test suite (unit & integration)
-├── docs/                # Comprehensive architectural and operational documentation
 ├── pyproject.toml       # Dependencies, packaging, Ruff & Mypy configurations
 ├── Dockerfile           # Production container configuration
-└── docker-compose.yml   # Multi-service local development environment (Postgres + Backend)
+└── scripts/             # Development scripts
 ```
 
 ---
@@ -109,20 +108,3 @@ ruff format .
 ```bash
 mypy app
 ```
-
----
-
-## 📚 Detailed Documentation
-
-Comprehensive architectural and engineering guides are located in `docs/`:
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — Layered architecture, design principles, and boundaries.
-- [`docs/ARCHITECTURE_DECISIONS.md`](docs/ARCHITECTURE_DECISIONS.md) — Architecture Decision Records (ADRs) explaining technical selections.
-- [`docs/DEVELOPMENT_SETUP.md`](docs/DEVELOPMENT_SETUP.md) — Step-by-step developer environment setup.
-- [`docs/ENVIRONMENT.md`](docs/ENVIRONMENT.md) — Environment variables specification and configuration hierarchy.
-- [`docs/DATABASE.md`](docs/DATABASE.md) — Async SQLAlchemy engine, session management, and Alembic workflow.
-- [`docs/API_GUIDELINES.md`](docs/API_GUIDELINES.md) — Standards for routes, schemas, status codes, and error envelopes.
-- [`docs/AUTHENTICATION_ARCHITECTURE.md`](docs/AUTHENTICATION_ARCHITECTURE.md) — Phase 2 Authentication architecture and threat model.
-- [`docs/AUTHENTICATION_SECURITY.md`](docs/AUTHENTICATION_SECURITY.md) — Argon2id password hashing and NIST SP 800-63B policy.
-- [`docs/SESSION_MANAGEMENT.md`](docs/SESSION_MANAGEMENT.md) — Opaque server-managed PostgreSQL sessions and cookie lifecycles.
-- [`docs/EMAIL_DELIVERY.md`](docs/EMAIL_DELIVERY.md) — Transactional email provider boundary (console/file/disabled sinks).
-- [`docs/FOUNDATION_SETUP_COMPLETE.md`](docs/FOUNDATION_SETUP_COMPLETE.md) — Verification checklist and foundation sign-off.

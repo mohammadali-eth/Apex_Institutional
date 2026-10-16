@@ -54,6 +54,4 @@ class AuthenticationAuditEvent(Base):
         nullable=True,
     )
 
-    __table_args__ = (
-        Index("ix_auth_audit_events_user_time", user_id, timestamp),
-    )
+    __table_args__ = (Index("ix_auth_audit_events_user_time", user_id, timestamp),)

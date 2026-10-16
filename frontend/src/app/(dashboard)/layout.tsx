@@ -44,8 +44,12 @@ export default function DashboardLayout({
   if (!isAuthenticated) {
     return (
       <LoginPage
-        onSuccess={() => {
-          router.push('/dashboard');
+        onSuccess={(status) => {
+          if (status?.portalRoute) {
+            router.push(status.portalRoute);
+          } else {
+            router.push('/dashboard');
+          }
         }}
       />
     );

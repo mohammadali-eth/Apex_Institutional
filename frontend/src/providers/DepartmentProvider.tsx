@@ -96,7 +96,7 @@ export const DepartmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       saveDemoState(nextState);
       setStatus('requires_selection');
     }
-  }, [currentUser]);
+  }, [currentUser, currentDepartment]);
 
   const availableDepartments = currentUser
     ? mockDepartments.filter(d => (currentUser.assignedDepartments || []).some(a => a.id === d.id))
