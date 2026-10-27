@@ -1,20 +1,17 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/useToast";
-import { useI18n } from "@/hooks/useI18n";
-import { userService } from "@/lib/services/userService";
 import {
   GraduationCap,
   ArrowRight,
   Eye,
   EyeOff,
-  Sparkles,
-  KeyRound,
   Lock,
   Mail,
-  UserCheck,
+  ShieldCheck,
+  AlertCircle,
 } from "lucide-react";
 
 const loginBg = "/assets/login-bg/image.png";
@@ -27,253 +24,61 @@ interface LoginPageProps {
   }) => void;
 }
 
-interface RolePreset {
-  id: string;
-  label: string;
-  roleName: string;
-  userName: string;
-  userId: string;
-  password: string;
-  aliases: string[];
-  icon: string;
-  color: string;
-  description: string;
-}
-
-const ROLE_PRESETS: RolePreset[] = [
-  {
-    id: "admin",
-    label: "Admin",
-    roleName: "Super / University Admin",
-    userName: "Avery Morgan",
-    userId: "u-super",
-    password: "admin123",
-    aliases: [
-      "admin",
-      "admin123",
-      "admin@123",
-      "superadmin",
-      "superadmin123",
-      "apexadmin",
-    ],
-    icon: "👑",
-    color: "from-amber-500 to-amber-600",
-    description:
-      "System administration, user creation & institutional settings",
-  },
-  {
-    id: "hod",
-    label: "HOD",
-    roleName: "Department Admin / HOD",
-    userName: "Prof. Sunita Sharma",
-    userId: "u-sunita",
-    password: "hod123",
-    aliases: ["hod", "hod123", "hod@123", "deptadmin", "deptadmin123"],
-    icon: "🏛️",
-    color: "from-sky-500 to-sky-600",
-    description: "Department syllabus, course management & faculty overview",
-  },
-  {
-    id: "faculty",
-    label: "Faculty",
-    roleName: "Faculty / Question Setter",
-    userName: "Dr. Rahul Patel",
-    userId: "u-rahul",
-    password: "faculty123",
-    aliases: [
-      "faculty",
-      "faculty123",
-      "faculty@123",
-      "setter",
-      "setter123",
-      "teacher",
-    ],
-    icon: "✍️",
-    color: "from-emerald-500 to-emerald-600",
-    description: "Create & contribute questions, generate draft papers",
-  },
-  {
-    id: "manager",
-    label: "QB Manager",
-    roleName: "Question Bank Manager",
-    userName: "Prof. Amit Shah",
-    userId: "u-amit",
-    password: "manager123",
-    aliases: ["manager", "manager123", "manager@123", "qbmanager"],
-    icon: "📚",
-    color: "from-indigo-500 to-indigo-600",
-    description: "Question review, taxonomy tagging & bank approvals",
-  },
-  {
-    id: "reviewer",
-    label: "Reviewer",
-    roleName: "Paper Reviewer",
-    userName: "Nikhil Rao",
-    userId: "u-reviewer",
-    password: "reviewer123",
-    aliases: ["reviewer", "reviewer123", "reviewer@123", "evaluator"],
-    icon: "🛡️",
-    color: "from-purple-500 to-purple-600",
-    description: "Audit & verify examination paper blueprints",
-  },
-  {
-    id: "exam",
-    label: "Exam Cell",
-    roleName: "Exam Coordinator",
-    userName: "Prof. Rajesh Joshi",
-    userId: "u-rajesh",
-    password: "exam123",
-    aliases: ["exam", "exam123", "exam@123", "controller", "coordinator"],
-    icon: "📝",
-    color: "from-teal-500 to-teal-600",
-    description: "Finalize, encrypt & bundle semester question papers",
-  },
-  {
-    id: "student",
-    label: "Student",
-    roleName: "Student / Viewer",
-    userName: "Dr. Neha Sharma",
-    userId: "u-neha",
-    password: "student123",
-    aliases: ["student", "student123", "student@123", "viewer", "viewer123"],
-    icon: "🎓",
-    color: "from-slate-500 to-slate-600",
-    description: "Read-only examination syllabus & past papers",
-  },
-];
-
 export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
-  const { login, loginWithCredentials } = useAuth();
-  const { t } = useI18n();
+  const { loginWithCredentials } = useAuth();
   const { showToast } = useToast();
 
-  const [email, setEmail] = useState("portal@maktabah.edu");
-  const [selectedRolePreset, setSelectedRolePreset] = useState<RolePreset>(
-    ROLE_PRESETS[2],
-  ); // Default to Faculty
-  const [password, setPassword] = useState("faculty123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
-  const [emailError, setEmailError] = useState("");
-  const [passwordError, setPasswordError] = useState("");
-
-  // Detect matching role based on current password input in real-time
-  const detectedRole = useMemo(() => {
-    const trimmed = password.trim().toLowerCase();
-    if (!trimmed) return selectedRolePreset;
-
-    const matched = ROLE_PRESETS.find((preset) =>
-      preset.aliases.some((alias) => alias.toLowerCase() === trimmed),
-    );
-    return matched || selectedRolePreset;
-  }, [password, selectedRolePreset]);
-
-  // Handle clicking a role pill
-  const handleSelectRolePreset = (preset: RolePreset) => {
-    setSelectedRolePreset(preset);
-    setPassword(preset.password);
-    setPasswordError("");
-    if (preset.id === "admin") {
-      setEmail("admin");
-    }
-  };
+  const [errorMessage, setErrorMessage] = useState("");
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const trimmedEmail = email.trim();
     if (!trimmedEmail) {
-      setEmailError("Please enter your institutional email address.");
-      showToast("Login failed", "Email is required to continue.", "warning");
+      setErrorMessage("Please enter your email address or username.");
+      showToast("Identifier Required", "Please enter your email or username.", "warning");
       return;
     }
 
-    const isAdministrativeUsername = trimmedEmail.toLowerCase() === "admin";
-    if (!isAdministrativeUsername && (!trimmedEmail.includes("@") || !trimmedEmail.includes("."))) {
-      setEmailError(
-        "Please enter a valid email address (e.g. portal@maktabah.edu) or administrative username.",
-      );
-      showToast("Invalid identifier", "Enter a valid email address or 'admin'", "warning");
-      return;
-    }
-
-    if (!password.trim()) {
-      setPasswordError("Please enter your role password.");
-      showToast("Login failed", "Password is required to continue.", "warning");
+    if (!password) {
+      setErrorMessage("Please enter your password.");
+      showToast("Password Required", "Please enter your password.", "warning");
       return;
     }
 
     setIsLoading(true);
-    setEmailError("");
-    setPasswordError("");
+    setErrorMessage("");
 
-    // 1. Attempt backend session authentication first via loginWithCredentials
     try {
-      const backendRes = await loginWithCredentials(trimmedEmail, password);
-      if (backendRes.success) {
+      const res = await loginWithCredentials(trimmedEmail, password);
+      if (res.success) {
         setIsLoading(false);
         showToast(
           "Signed In",
-          `Welcome back! (${detectedRole.roleName})`,
+          "Authentication successful. Redirecting to your authorized workspace...",
           "success",
         );
         onSuccess({
-          ...(backendRes.status || { requiresDeptSelection: false, noDeptAssigned: false }),
-          portalRoute: backendRes.portalRoute,
+          ...(res.status || { requiresDeptSelection: false, noDeptAssigned: false }),
+          portalRoute: res.portalRoute,
         });
-        return;
-      } else if (
-        backendRes.error &&
-        !backendRes.error.includes("Failed to fetch") &&
-        !backendRes.error.includes("NetworkError")
-      ) {
-        // Explicit backend authentication rejection
+      } else {
         setIsLoading(false);
-        setPasswordError(backendRes.error);
-        showToast("Authentication Failed", backendRes.error, "error");
-        return;
+        const err = res.error || "Invalid credentials or unauthorized domain.";
+        setErrorMessage(err);
+        showToast("Authentication Failed", err, "error");
       }
-    } catch {
-      // Backend not running; fall back to local demo state below
-    }
-
-    // 2. Demo fallback for local development when backend is offline
-    const allUsers = userService.getUsers();
-    let targetUserId = detectedRole.userId;
-
-    const matchedByEmail = allUsers.find(
-      (u) => u.email.toLowerCase() === trimmedEmail.toLowerCase(),
-    );
-
-    const isSpecificRolePassword = ROLE_PRESETS.some((preset) =>
-      preset.aliases.some(
-        (alias) => alias.toLowerCase() === password.trim().toLowerCase(),
-      ),
-    );
-
-    if (matchedByEmail && !isSpecificRolePassword) {
-      targetUserId = matchedByEmail.id;
-    }
-
-    const targetUser =
-      allUsers.find((u) => u.id === targetUserId) || allUsers[0];
-
-    window.setTimeout(() => {
+    } catch (err: unknown) {
       setIsLoading(false);
-      if (!targetUser) {
-        showToast("Login Error", "User account not found.", "error");
-        return;
-      }
-
-      const res = login(targetUser.id);
-      showToast(
-        "Signed In",
-        `Welcome back, ${targetUser.name}! (${detectedRole.roleName})`,
-        "success",
-      );
-      onSuccess(res);
-    }, 250);
+      const msg = err instanceof Error ? err.message : "Unable to connect to authentication service.";
+      setErrorMessage(msg);
+      showToast("Connection Error", msg, "error");
+    }
   };
 
   return (
@@ -338,11 +143,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
         </div>
       </div>
 
-      {/* Center Hero & Login Card */}
+      {/* Center Hero & Floating Login Card */}
       <main className="relative z-10 w-full max-w-md my-auto flex flex-col items-center justify-center">
         <div className="w-full max-w-md">
-          {/* Card Container */}
-          <div className="bg-white/95 backdrop-blur-xl py-7 px-6 sm:px-8 shadow-2xl rounded-3xl border border-white/80 ring-1 ring-slate-900/5 transition-all">
+          {/* Floating Card Container */}
+          <div className="bg-white/95 backdrop-blur-xl py-8 px-6 sm:px-8 shadow-2xl rounded-3xl border border-white/80 ring-1 ring-slate-900/5 transition-all">
             {/* Form Title & Subtitle */}
             <div className="text-center mb-6">
               <div className="mx-auto w-12 h-12 rounded-2xl bg-brand-primary-light border border-brand-primary/20 flex items-center justify-center mb-3 shadow-sm">
@@ -352,112 +157,50 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
                 Institutional Sign In
               </h2>
               <p className="mt-1 text-xs text-slate-500 font-medium">
-                One institutional email. Enter role password to sign in.
+                Enter your institutional email or username to access your workspace
               </p>
             </div>
 
-            {/* Quick Role Selection Pills */}
-            <div className="mb-5">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center space-x-1">
-                  <UserCheck className="h-3.5 w-3.5 text-brand-primary" />
-                  <span>Choose Persona Role</span>
-                </span>
-                <span className="text-[10px] font-semibold text-brand-primary bg-brand-primary-light px-2 py-0.5 rounded-full">
-                  Click to fill password
-                </span>
+            {/* Error Alert Banner */}
+            {errorMessage && (
+              <div className="mb-5 p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700 flex items-start space-x-2 animate-fadeIn">
+                <AlertCircle className="h-4 w-4 text-rose-500 flex-shrink-0 mt-0.5" />
+                <span className="font-medium leading-relaxed">{errorMessage}</span>
               </div>
-
-              <div className="grid grid-cols-4 sm:grid-cols-4 gap-1.5">
-                {ROLE_PRESETS.slice(0, 4).map((preset) => {
-                  const isActive = detectedRole.id === preset.id;
-                  return (
-                    <button
-                      key={preset.id}
-                      type="button"
-                      onClick={() => handleSelectRolePreset(preset)}
-                      className={`py-2 px-1 text-center rounded-xl text-xs font-bold transition-all flex flex-col items-center justify-center space-y-0.5 border ${
-                        isActive
-                          ? "bg-brand-primary text-white border-brand-primary shadow-sm scale-[1.02]"
-                          : "bg-slate-50/90 text-slate-700 border-slate-200 hover:bg-slate-100 hover:border-slate-300"
-                      }`}
-                    >
-                      <span className="text-sm">{preset.icon}</span>
-                      <span className="text-[11px] truncate w-full">
-                        {preset.label}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="grid grid-cols-3 gap-1.5 mt-1.5">
-                {ROLE_PRESETS.slice(4).map((preset) => {
-                  const isActive = detectedRole.id === preset.id;
-                  return (
-                    <button
-                      key={preset.id}
-                      type="button"
-                      onClick={() => handleSelectRolePreset(preset)}
-                      className={`py-1.5 px-1 text-center rounded-xl text-xs font-bold transition-all flex items-center justify-center space-x-1 border ${
-                        isActive
-                          ? "bg-brand-primary text-white border-brand-primary shadow-sm scale-[1.02]"
-                          : "bg-slate-50/90 text-slate-700 border-slate-200 hover:bg-slate-100 hover:border-slate-300"
-                      }`}
-                    >
-                      <span className="text-xs">{preset.icon}</span>
-                      <span className="text-[10px] truncate">
-                        {preset.label}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+            )}
 
             {/* Login Form */}
             <form className="space-y-4" onSubmit={handleSignIn}>
-              {/* Institutional Email Field */}
+              {/* Email / Username Field */}
               <div>
-                <label className="block text-xs font-bold uppercase text-slate-700 tracking-wider mb-1">
-                  Institutional Email
+                <label className="block text-xs font-bold uppercase text-slate-700 tracking-wider mb-1.5">
+                  Email or Username
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
                     <Mail className="h-4 w-4" />
                   </div>
                   <input
-                    type="email"
+                    type="text"
                     required
                     value={email}
                     onChange={(e) => {
                       setEmail(e.target.value);
-                      if (emailError) setEmailError("");
+                      if (errorMessage) setErrorMessage("");
                     }}
-                    placeholder="portal@maktabah.edu"
-                    className={`w-full pl-9 pr-3.5 py-2.5 bg-slate-50/60 border rounded-xl text-sm text-slate-900 font-medium focus:bg-white focus:ring-2 focus:ring-brand-primary focus:border-brand-primary transition ${
-                      emailError
-                        ? "border-rose-300 bg-rose-50"
-                        : "border-slate-300"
-                    }`}
+                    placeholder="e.g. ali@universityadmin.in or admin"
+                    autoComplete="username"
+                    className="w-full pl-9 pr-3.5 py-2.5 bg-slate-50/70 border border-slate-300 rounded-xl text-sm text-slate-900 font-medium focus:bg-white focus:ring-2 focus:ring-brand-primary focus:border-brand-primary transition"
                   />
                 </div>
-                {emailError && (
-                  <p className="mt-1.5 text-xs text-rose-600 font-medium">
-                    {emailError}
-                  </p>
-                )}
               </div>
 
               {/* Password Field */}
               <div>
-                <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center justify-between mb-1.5">
                   <label className="block text-xs font-bold uppercase text-slate-700 tracking-wider">
-                    Role Password
+                    Password
                   </label>
-                  <span className="text-[11px] text-slate-400 font-mono">
-                    Hint: {detectedRole.password}
-                  </span>
                 </div>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
@@ -469,21 +212,16 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
                     value={password}
                     onChange={(e) => {
                       setPassword(e.target.value);
-                      if (passwordError) setPasswordError("");
+                      if (errorMessage) setErrorMessage("");
                     }}
-                    placeholder="Enter role password"
-                    className={`w-full pl-9 pr-10 py-2.5 bg-slate-50/60 border rounded-xl text-sm text-slate-900 font-medium focus:bg-white focus:ring-2 focus:ring-brand-primary focus:border-brand-primary transition ${
-                      passwordError
-                        ? "border-rose-300 bg-rose-50"
-                        : "border-slate-300"
-                    }`}
+                    placeholder="Enter your account password"
+                    autoComplete="current-password"
+                    className="w-full pl-9 pr-10 py-2.5 bg-slate-50/70 border border-slate-300 rounded-xl text-sm text-slate-900 font-medium focus:bg-white focus:ring-2 focus:ring-brand-primary focus:border-brand-primary transition"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    aria-label={
-                      showPassword ? "Hide password" : "Show password"
-                    }
+                    aria-label={showPassword ? "Hide password" : "Show password"}
                     className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 focus:outline-none transition"
                   >
                     {showPassword ? (
@@ -493,29 +231,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
                     )}
                   </button>
                 </div>
-                {passwordError && (
-                  <p className="mt-1.5 text-xs text-rose-600 font-medium">
-                    {passwordError}
-                  </p>
-                )}
-              </div>
-
-              {/* Dynamic Role Detected Badge */}
-              <div className="p-2.5 rounded-xl bg-emerald-50/80 border border-emerald-200/80 flex items-center justify-between text-xs text-emerald-900 animate-fadeIn">
-                <div className="flex items-center space-x-2 truncate">
-                  <span className="text-base">{detectedRole.icon}</span>
-                  <div className="truncate">
-                    <span className="font-bold text-slate-800">
-                      {detectedRole.userName}
-                    </span>
-                    <span className="block text-[10px] text-emerald-700 font-medium truncate">
-                      {detectedRole.roleName}
-                    </span>
-                  </div>
-                </div>
-                <span className="ml-2 px-2 py-0.5 rounded-md bg-emerald-100 text-[10px] font-mono font-bold text-emerald-800 flex-shrink-0">
-                  {detectedRole.password}
-                </span>
               </div>
 
               {/* Remember Me Toggle */}
@@ -530,18 +245,18 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
                   <span>Remember this terminal</span>
                 </label>
                 <a
-                  href="#directory"
+                  href="#support"
                   onClick={(e) => {
                     e.preventDefault();
                     showToast(
                       "Directory Service",
-                      "Institution passwords can be reset via IT administration.",
+                      "Institutional access is managed by your Super Administrator.",
                       "info",
                     );
                   }}
                   className="text-slate-500 hover:text-brand-primary font-medium transition"
                 >
-                  Forgot password?
+                  Need assistance?
                 </a>
               </div>
 
@@ -551,46 +266,15 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
                 disabled={isLoading}
                 className="w-full flex items-center justify-center space-x-2 py-3 px-4 rounded-xl text-sm font-bold text-white bg-brand-primary hover:bg-brand-primary-hover shadow-lg shadow-brand-primary/25 transition-all transform active:scale-[0.98] disabled:opacity-50"
               >
-                <span>
-                  {isLoading
-                    ? "Authenticating..."
-                    : `Sign In as ${detectedRole.label}`}
-                </span>
+                <span>{isLoading ? "Authenticating..." : "Sign In"}</span>
                 <ArrowRight className="h-4 w-4" />
               </button>
             </form>
 
-            {/* Quick Password Guide Footer */}
-            <div className="mt-5 pt-4 border-t border-slate-100 text-center">
-              <div className="flex items-center justify-center space-x-1.5 text-[11px] font-semibold text-slate-500 mb-1.5">
-                <KeyRound className="h-3 w-3 text-brand-primary" />
-                <span>One Email • Passwords by Role:</span>
-              </div>
-              <div className="flex flex-wrap items-center justify-center gap-1 text-[10px]">
-                <span className="font-mono bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200">
-                  admin123
-                </span>
-                <span className="text-slate-300">•</span>
-                <span className="font-mono bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200">
-                  hod123
-                </span>
-                <span className="text-slate-300">•</span>
-                <span className="font-mono bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200">
-                  faculty123
-                </span>
-                <span className="text-slate-300">•</span>
-                <span className="font-mono bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200">
-                  manager123
-                </span>
-                <span className="text-slate-300">•</span>
-                <span className="font-mono bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200">
-                  reviewer123
-                </span>
-                <span className="text-slate-300">•</span>
-                <span className="font-mono bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200">
-                  student123
-                </span>
-              </div>
+            {/* Security Badge */}
+            <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-center space-x-2 text-[11px] text-slate-500 font-medium">
+              <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+              <span>Enterprise Argon2id Password Hashing &amp; Scope Isolation</span>
             </div>
           </div>
         </div>

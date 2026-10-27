@@ -1,11 +1,81 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { User } from '@/types';
+import { User, UserRole, AssignedDepartment } from '@/types';
 import { userService } from '@/lib/services/userService';
 import { authService, AuthUserResponse } from '@/lib/services/authService';
 import { loadDemoState, saveDemoState } from '@/data/demoState';
 import { auditService } from '@/lib/services/auditService';
+import { ROLE_DEFINITIONS } from '@/lib/permissions/rolePermissions';
+
+const ROLE_CODE_MAP: Record<string, UserRole> = {
+  SUPER_ADMIN: 'super_admin',
+  UNIVERSITY_ADMIN: 'university_admin',
+  INSTITUTION_ADMIN: 'institution_admin',
+  DEPARTMENT_ADMIN: 'department_admin',
+  FACULTY_QUESTION_SETTER: 'faculty',
+  QUESTION_PAPER_REVIEWER: 'question_paper_reviewer',
+  EXAM_CONTROLLER: 'exam_controller',
+  EXAM_COORDINATOR: 'exam_coordinator',
+  QUESTION_BANK_MANAGER: 'question_bank_manager',
+  QUALITY_CONTROLLER: 'quality_controller',
+  STUDENT: 'student',
+  GENERAL_USER: 'viewer',
+};
+
+function resolveFrontendUserFromBackend(authRes: AuthUserResponse): User {
+  const allUsers = userService.getUsers();
+  const localMatch = allUsers.find((u) => u.email.toLowerCase() === authRes.email.toLowerCase());
+
+  const activeCode =
+    authRes.active_role ||
+    authRes.primary_role ||
+    authRes.roles?.[0]?.role_code ||
+    authRes.role_assignments?.[0]?.role_code ||
+    'GENERAL_USER';
+
+  const mappedRole: UserRole = ROLE_CODE_MAP[activeCode] || 'viewer';
+
+  if (localMatch) {
+    return {
+      ...localMatch,
+      role: mappedRole,
+      name: authRes.full_name || localMatch.name,
+      isActive: authRes.status === 'active',
+    };
+  }
+
+  const rawAssignments = authRes.roles || authRes.role_assignments || [];
+  const assignedDepts: AssignedDepartment[] = rawAssignments
+    .filter((r) => r.department_id && r.is_active)
+    .map((r) => ({
+      id: r.department_id!,
+      name: r.department_name || 'Academic Department',
+      code: r.department_name?.substring(0, 3).toUpperCase() || 'DEP',
+      institutionId: r.institution_id || 'inst-apex',
+      institutionName: r.institution_name || 'Apex University',
+      programCount: 1,
+      subjectCount: 1,
+    }));
+
+  const primaryScope = rawAssignments[0];
+  const permissions = ROLE_DEFINITIONS[mappedRole]?.permissions || [];
+
+  return {
+    id: authRes.id,
+    name: authRes.full_name || authRes.email.split('@')[0].toUpperCase(),
+    email: authRes.email,
+    role: mappedRole,
+    institutionId: primaryScope?.institution_id || 'inst-apex',
+    institutionName: primaryScope?.institution_name || 'Apex University',
+    universityId: primaryScope?.university_id || 'APEX-UNIV',
+    departmentId: assignedDepts[0]?.id,
+    departmentName: assignedDepts[0]?.name,
+    assignedDepartments: assignedDepts,
+    permissions,
+    isActive: authRes.status === 'active',
+  };
+}
 
 export interface AuthContextType {
   currentUser: User | null;
@@ -48,13 +118,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const me = await authService.getMe();
         if (me && isMounted) {
           setBackendUser(me);
-          // Match or construct a corresponding user in the frontend state
-          const localMatch = userService
-            .getUsers()
-            .find((u) => u.email.toLowerCase() === me.email.toLowerCase());
-          if (localMatch) {
-            setCurrentUser(localMatch);
-          }
+          const mapped = resolveFrontendUserFromBackend(me);
+          setCurrentUser(mapped);
           return;
         }
       } catch {
@@ -96,31 +161,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const authRes = await authService.login(email, password);
       setBackendUser(authRes);
 
-      // Map to frontend user
-      const allUsers = userService.getUsers();
-      const matched =
-        allUsers.find((u) => u.email.toLowerCase() === authRes.email.toLowerCase()) ||
-        allUsers[0];
+      const mapped = resolveFrontendUserFromBackend(authRes);
+      setCurrentUser(mapped);
 
-      if (matched) {
-        setCurrentUser(matched);
-        const nextState = loadDemoState();
-        nextState.activeUserId = matched.id;
-        nextState.activeDepartmentId = matched.departmentId || nextState.activeDepartmentId || null;
-        saveDemoState(nextState);
+      const nextState = loadDemoState();
+      nextState.activeUserId = mapped.id;
+      nextState.activeDepartmentId = mapped.departmentId || nextState.activeDepartmentId || null;
+      saveDemoState(nextState);
 
-        const deptCount = matched.assignedDepartments.length;
-        const requiresDeptSelection = deptCount > 1;
-        const noDeptAssigned = deptCount === 0 && matched.role === 'faculty';
+      const deptCount = mapped.assignedDepartments.length;
+      const requiresDeptSelection = deptCount > 1;
+      const noDeptAssigned = deptCount === 0 && mapped.role === 'faculty';
 
-        return {
-          success: true,
-          portalRoute: authRes.portal_route,
-          status: { requiresDeptSelection, noDeptAssigned },
-        };
-      }
-
-      return { success: true, portalRoute: authRes.portal_route };
+      return {
+        success: true,
+        portalRoute: authRes.portal_route,
+        status: { requiresDeptSelection, noDeptAssigned },
+      };
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Authentication failed';
       return { success: false, error: message };

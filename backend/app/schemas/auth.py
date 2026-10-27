@@ -18,6 +18,32 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=1, max_length=128)
 
 
+class RegisterRequest(BaseModel):
+    """New user account registration payload."""
+
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=128)
+    full_name: str | None = Field(default=None, max_length=255)
+
+
+class UserProfileSummary(BaseModel):
+    """Safe user profile overview."""
+
+    id: uuid.UUID
+    email: str
+    name: str | None = None
+    full_name: str | None = None
+    status: UserStatus
+
+
+class ScopeItemResponse(BaseModel):
+    """Organizational or departmental scope summary."""
+
+    id: uuid.UUID
+    name: str
+    code: str | None = None
+
+
 class UserResponse(BaseModel):
     """Safe public representation of user identity with active roles and portal routing."""
 
@@ -34,6 +60,12 @@ class UserResponse(BaseModel):
     active_role: str | None = None
     portal_route: str = "/workspace"
     must_change_password: bool = False
+
+    # Extended Section 20 authoritative attributes
+    user: UserProfileSummary | None = None
+    permissions: list[str] = []
+    organization: ScopeItemResponse | None = None
+    departments: list[ScopeItemResponse] = []
 
 
 class ChangePasswordRequest(BaseModel):

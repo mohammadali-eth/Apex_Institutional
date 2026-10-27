@@ -196,7 +196,7 @@ export default function WorkspacePortalPage() {
         <div className="flex items-center space-x-2">
           {backendUser?.primary_role === 'SUPER_ADMIN' && (
             <button
-              onClick={() => router.push('/super-admin')}
+              onClick={() => router.push('/admin')}
               className="px-3.5 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 transition"
             >
               Super Admin Portal

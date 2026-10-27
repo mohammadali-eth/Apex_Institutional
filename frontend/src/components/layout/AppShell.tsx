@@ -51,7 +51,7 @@ export const AppShell: React.FC<AppShellProps> = ({
 
   const navItems = [
     {
-      id: "super-admin",
+      id: "admin",
       label: "Super Admin Portal",
       icon: ShieldCheck,
       allowed: () =>
@@ -428,7 +428,9 @@ export const AppShell: React.FC<AppShellProps> = ({
           <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
             {allowedNav.map((item) => {
               const Icon = item.icon;
-              const isActive = activeNav === item.id;
+              const isActive =
+                activeNav === item.id ||
+                (item.id === "admin" && (activeNav === "admin" || activeNav === "super-admin"));
               return (
                 <button
                   key={item.id}
@@ -489,7 +491,9 @@ export const AppShell: React.FC<AppShellProps> = ({
               <nav className="flex-1 py-4 space-y-1 overflow-y-auto">
                 {allowedNav.map((item) => {
                   const Icon = item.icon;
-                  const isActive = activeNav === item.id;
+                  const isActive =
+                    activeNav === item.id ||
+                    (item.id === "admin" && (activeNav === "admin" || activeNav === "super-admin"));
                   return (
                     <button
                       key={item.id}

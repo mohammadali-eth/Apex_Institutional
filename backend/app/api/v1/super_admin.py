@@ -15,6 +15,11 @@ from app.models.organization import Institution
 from app.models.role import Role, UserRoleAssignment
 from app.models.user import User
 from app.schemas.auth import MessageResponse
+from app.schemas.domain_mapping import (
+    DomainMappingCreate,
+    DomainMappingResponse,
+    DomainMappingUpdate,
+)
 from app.schemas.organization import (
     InstitutionCreate,
     InstitutionResponse,
@@ -24,9 +29,11 @@ from app.schemas.organization import (
 )
 from app.schemas.role import (
     ProvisionUniversityAdminRequest,
+    RoleResponse,
     StaffMemberResponse,
     UpdateAccountStatusRequest,
 )
+from app.services.domain_service import domain_service
 from app.services.organization_service import organization_service
 from app.services.role_service import role_service
 
@@ -362,3 +369,132 @@ async def list_audit_events(
         }
         for e in events
     ]
+
+
+@super_admin_router.get(
+    "/roles",
+    response_model=list[RoleResponse],
+    summary="List Roles Catalog",
+)
+async def list_roles(
+    db: AsyncSession = Depends(get_db_session),
+) -> list[RoleResponse]:
+    """Retrieve catalog of all roles for platform governance and domain assignment."""
+    return await role_service.get_all_roles(db)
+
+
+@super_admin_router.get(
+    "/domain-mappings",
+    response_model=list[DomainMappingResponse],
+    summary="List Configured Domain-to-Role Mappings",
+)
+async def list_domain_mappings(
+    active_only: bool = Query(default=False),
+    db: AsyncSession = Depends(get_db_session),
+) -> list[DomainMappingResponse]:
+    """Retrieve all configured domain mappings with resolved role and scope details."""
+    mappings = await domain_service.list_domain_mappings(db, active_only=active_only)
+    return [domain_service.serialize_domain_mapping(m) for m in mappings]
+
+
+@super_admin_router.post(
+    "/domain-mappings",
+    response_model=DomainMappingResponse,
+    dependencies=[Depends(require_csrf)],
+    status_code=status.HTTP_201_CREATED,
+    summary="Configure Domain-to-Role Mapping",
+)
+async def create_domain_mapping(
+    payload: DomainMappingCreate,
+    request: Request,
+    super_admin: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> DomainMappingResponse:
+    """Create a new domain mapping, preventing conflicting mappings and unauthorized privilege escalation."""
+    mapping, error = await domain_service.create_domain_mapping(
+        db=db,
+        data=payload,
+        actor_user_id=super_admin.id,
+        request=request,
+    )
+    if not mapping or error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error or "Failed to configure domain mapping.",
+        )
+    return domain_service.serialize_domain_mapping(mapping)
+
+
+@super_admin_router.get(
+    "/domain-mappings/{mapping_id}",
+    response_model=DomainMappingResponse,
+    summary="Get Domain Mapping Details",
+)
+async def get_domain_mapping(
+    mapping_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db_session),
+) -> DomainMappingResponse:
+    """Retrieve single domain mapping details."""
+    mapping = await domain_service.get_domain_mapping_by_id(db, mapping_id)
+    if not mapping:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Domain mapping not found.",
+        )
+    return domain_service.serialize_domain_mapping(mapping)
+
+
+@super_admin_router.put(
+    "/domain-mappings/{mapping_id}",
+    response_model=DomainMappingResponse,
+    dependencies=[Depends(require_csrf)],
+    summary="Update Domain Mapping",
+)
+async def update_domain_mapping(
+    mapping_id: uuid.UUID,
+    payload: DomainMappingUpdate,
+    request: Request,
+    super_admin: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> DomainMappingResponse:
+    """Update domain mapping attributes, active status, or organizational scope."""
+    mapping, error = await domain_service.update_domain_mapping(
+        db=db,
+        mapping_id=mapping_id,
+        data=payload,
+        actor_user_id=super_admin.id,
+        request=request,
+    )
+    if not mapping or error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error or "Failed to update domain mapping.",
+        )
+    return domain_service.serialize_domain_mapping(mapping)
+
+
+@super_admin_router.delete(
+    "/domain-mappings/{mapping_id}",
+    response_model=MessageResponse,
+    dependencies=[Depends(require_csrf)],
+    summary="Delete Domain Mapping",
+)
+async def delete_domain_mapping(
+    mapping_id: uuid.UUID,
+    request: Request,
+    super_admin: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> MessageResponse:
+    """Delete a domain mapping configuration."""
+    success, error = await domain_service.delete_domain_mapping(
+        db=db,
+        mapping_id=mapping_id,
+        actor_user_id=super_admin.id,
+        request=request,
+    )
+    if not success or error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error or "Failed to delete domain mapping.",
+        )
+    return MessageResponse(message="Domain mapping successfully removed.")

@@ -1,5 +1,7 @@
 """Authentication and identity endpoints."""
 
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,8 +28,11 @@ from app.schemas.auth import (
     ForgotPasswordRequest,
     LoginRequest,
     MessageResponse,
+    RegisterRequest,
     ResendVerificationRequest,
     ResetPasswordRequest,
+    ScopeItemResponse,
+    UserProfileSummary,
     UserResponse,
     VerifyEmailRequest,
 )
@@ -38,6 +43,72 @@ from app.services.role_service import role_service
 from app.services.session_service import session_service
 
 auth_router = APIRouter(prefix="/auth", tags=["Authentication"])
+
+
+async def build_user_response(db: AsyncSession, user: User) -> UserResponse:
+    """Build the authoritative UserResponse including multi-role assignments,
+    permissions catalog resolution, organization, and departmental scopes.
+    """
+    assignments = await role_service.get_user_role_assignments(db, user.id, active_only=True)
+    portal_route, primary_role = role_service.resolve_portal_routing(assignments)
+    serialized_roles = role_service.serialize_role_assignments(assignments)
+
+    role_codes = [a.role.code for a in assignments if a.role]
+    permissions = role_service.get_permissions_for_roles(role_codes)
+
+    organization: ScopeItemResponse | None = None
+    departments: list[ScopeItemResponse] = []
+    seen_dept_ids: set[uuid.UUID] = set()
+
+    for a in assignments:
+        if not organization and a.university:
+            organization = ScopeItemResponse(
+                id=a.university.id,
+                name=a.university.name,
+                code=getattr(a.university, "code", None),
+            )
+        elif not organization and a.institution:
+            organization = ScopeItemResponse(
+                id=a.institution.id,
+                name=a.institution.name,
+                code=getattr(a.institution, "code", None),
+            )
+        if a.department and a.department.id not in seen_dept_ids:
+            seen_dept_ids.add(a.department.id)
+            departments.append(
+                ScopeItemResponse(
+                    id=a.department.id,
+                    name=a.department.name,
+                    code=getattr(a.department, "code", None),
+                )
+            )
+
+    user_profile = UserProfileSummary(
+        id=user.id,
+        email=user.email,
+        name=user.full_name,
+        full_name=user.full_name,
+        status=user.status,
+    )
+
+    return UserResponse(
+        id=user.id,
+        email=user.email,
+        full_name=user.full_name,
+        status=user.status,
+        email_verified_at=user.email_verified_at,
+        created_at=user.created_at,
+        last_login_at=user.last_login_at,
+        roles=serialized_roles,
+        active_role=primary_role,
+        portal_route=portal_route,
+        must_change_password=user.password_changed_at is None,
+        user=user_profile,
+        permissions=permissions,
+        organization=organization,
+        departments=departments,
+    )
+
 
 
 @auth_router.get("/csrf", response_model=CsrfTokenResponse, summary="Obtain CSRF Token")
@@ -92,23 +163,55 @@ async def login(
     csrf_token = generate_csrf_token()
     set_csrf_cookie(response, csrf_token)
 
-    assignments = await role_service.get_user_role_assignments(db, user.id, active_only=True)
-    portal_route, primary_role = role_service.resolve_portal_routing(assignments)
-    serialized_roles = role_service.serialize_role_assignments(assignments)
+    return await build_user_response(db, user)
 
-    return UserResponse(
-        id=user.id,
-        email=user.email,
-        full_name=user.full_name,
-        status=user.status,
-        email_verified_at=user.email_verified_at,
-        created_at=user.created_at,
-        last_login_at=user.last_login_at,
-        roles=serialized_roles,
-        active_role=primary_role,
-        portal_route=portal_route,
-        must_change_password=user.password_changed_at is None,
+
+@auth_router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED, summary="User Registration")
+async def register(
+    payload: RegisterRequest,
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db_session),
+) -> UserResponse:
+    """Register and securely provision a new user account following domain-based access rules."""
+    check_login_rate_limit(request)
+
+    user, error = await auth_service.register_user(
+        db=db,
+        email=payload.email,
+        password=payload.password,
+        full_name=payload.full_name,
+        request=request,
     )
+    if not user or error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error or "Registration failed.",
+        )
+
+    # Invalidate existing session on same connection if present
+    existing_token = get_session_token_from_request(request)
+    if existing_token:
+        await session_service.revoke_session(db, existing_token)
+
+    # Create new session
+    client_ip = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+    _, raw_token = await session_service.create_session(
+        db=db,
+        user_id=user.id,
+        ip_address=client_ip,
+        user_agent=user_agent,
+    )
+
+    # Set secure HttpOnly session cookie
+    set_session_cookie(response, raw_token)
+
+    # Set fresh CSRF cookie
+    csrf_token = generate_csrf_token()
+    set_csrf_cookie(response, csrf_token)
+
+    return await build_user_response(db, user)
 
 
 @auth_router.post(
@@ -171,23 +274,25 @@ async def get_me(
     db: AsyncSession = Depends(get_db_session),
 ) -> UserResponse:
     """Retrieve safe identity fields and resolved role context of the authenticated session."""
-    assignments = await role_service.get_user_role_assignments(db, user.id, active_only=True)
-    portal_route, primary_role = role_service.resolve_portal_routing(assignments)
-    serialized_roles = role_service.serialize_role_assignments(assignments)
+    return await build_user_response(db, user)
 
-    return UserResponse(
-        id=user.id,
-        email=user.email,
-        full_name=user.full_name,
-        status=user.status,
-        email_verified_at=user.email_verified_at,
-        created_at=user.created_at,
-        last_login_at=user.last_login_at,
-        roles=serialized_roles,
-        active_role=primary_role,
-        portal_route=portal_route,
-        must_change_password=user.password_changed_at is None,
-    )
+
+@auth_router.post(
+    "/refresh",
+    response_model=UserResponse,
+    summary="Session and Identity Refresh",
+)
+async def refresh_session(
+    request: Request,
+    response: Response,
+    auth_context: tuple[User, UserSession] = Depends(get_current_user_and_session),
+    db: AsyncSession = Depends(get_db_session),
+) -> UserResponse:
+    """Refresh active session context and return updated identity, roles, and permissions."""
+    user, _ = auth_context
+    csrf_token = generate_csrf_token()
+    set_csrf_cookie(response, csrf_token)
+    return await build_user_response(db, user)
 
 
 @auth_router.get(

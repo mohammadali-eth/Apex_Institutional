@@ -129,7 +129,8 @@ class AuthService {
       const errorData: ApiErrorResponse = await res.json().catch(() => ({
         error: { code: 'HTTP_ERROR', message: 'Authentication failed' },
       }));
-      throw new Error(errorData.error?.message || 'Invalid email or password.');
+      const detailMsg = errorData.error?.details?.map((d) => d.message).join(', ');
+      throw new Error(detailMsg || errorData.error?.message || 'Invalid email or password.');
     }
 
     // Refresh CSRF token after login

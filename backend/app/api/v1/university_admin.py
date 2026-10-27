@@ -20,12 +20,14 @@ from app.schemas.organization import (
     UniversityResponse,
 )
 from app.schemas.role import (
+    CreateStaffUserRequest,
     RoleAssignRequest,
     RoleResponse,
     StaffInvitationResponse,
     StaffInviteRequest,
     StaffMemberResponse,
     UpdateAccountStatusRequest,
+    UpdateStaffUserRequest,
     UserRoleAssignmentResponse,
 )
 from app.services.organization_service import organization_service
@@ -153,6 +155,24 @@ async def list_departments(
     return await organization_service.list_departments(db, institution_id)
 
 
+@university_admin_router.get(
+    "/departments",
+    response_model=list[DepartmentResponse],
+    summary="List University Departments",
+)
+async def list_university_departments(
+    institution_id: uuid.UUID | None = Query(default=None),
+    university_id: uuid.UUID | None = Query(default=None),
+    admin_context: tuple[User, uuid.UUID | None] = Depends(require_university_admin),
+    db: AsyncSession = Depends(get_db_session),
+) -> list[DepartmentResponse]:
+    """List departments under authorized university, optionally filtered by institution."""
+    target_univ_id = _resolve_target_university(admin_context, university_id)
+    return await organization_service.list_university_departments(
+        db, target_univ_id, institution_id=institution_id
+    )
+
+
 @university_admin_router.post(
     "/departments",
     response_model=DepartmentResponse,
@@ -203,6 +223,11 @@ async def create_department(
     response_model=list[RoleResponse],
     summary="List Delegable Roles",
 )
+@university_admin_router.get(
+    "/delegable-roles",
+    response_model=list[RoleResponse],
+    include_in_schema=False,
+)
 async def list_delegable_roles(
     admin_context: tuple[User, uuid.UUID | None] = Depends(require_university_admin),
     db: AsyncSession = Depends(get_db_session),
@@ -228,6 +253,74 @@ async def list_staff(
     """List staff members and active role assignments in the university."""
     target_univ_id = _resolve_target_university(admin_context, university_id)
     return await role_service.list_staff_members(db, target_univ_id)
+
+
+@university_admin_router.get(
+    "/domains",
+    response_model=list[str],
+    summary="List Authorized Email Domains",
+)
+async def list_authorized_domains(
+    university_id: uuid.UUID | None = Query(default=None),
+    admin_context: tuple[User, uuid.UUID | None] = Depends(require_university_admin),
+    db: AsyncSession = Depends(get_db_session),
+) -> list[str]:
+    """List active domain patterns authorized for provisioning staff under caller's university."""
+    target_univ_id = _resolve_target_university(admin_context, university_id)
+    return await role_service.get_authorized_domains(db, target_univ_id)
+
+
+@university_admin_router.post(
+    "/staff",
+    response_model=StaffMemberResponse,
+    dependencies=[Depends(require_csrf)],
+    status_code=status.HTTP_201_CREATED,
+    summary="Directly Provision Staff Member with Credentials and Role",
+)
+async def provision_staff_user(
+    payload: CreateStaffUserRequest,
+    request: Request,
+    university_id: uuid.UUID | None = Query(default=None),
+    admin_context: tuple[User, uuid.UUID | None] = Depends(require_university_admin),
+    db: AsyncSession = Depends(get_db_session),
+) -> StaffMemberResponse:
+    """University Admin provisions a user account with explicit email, password, and delegated role.
+
+    The email domain must match an authorized domain for the university, but the email username
+    and password can be any value specified by the administrator.
+    """
+    user, _ = admin_context
+    target_univ_id = _resolve_target_university(
+        admin_context, payload.university_id or university_id
+    )
+    new_user, error = await role_service.provision_staff_user(
+        db=db,
+        actor_user=user,
+        email=payload.email,
+        password=payload.password,
+        full_name=payload.full_name,
+        role_code=payload.role_code,
+        university_id=target_univ_id,
+        institution_id=payload.institution_id,
+        department_id=payload.department_id,
+        request=request,
+    )
+    if not new_user or error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error or "Failed to provision staff member.",
+        )
+    assignments = await role_service.get_user_role_assignments(db, new_user.id, active_only=True)
+    serialized = role_service.serialize_role_assignments(assignments)
+    return StaffMemberResponse(
+        id=new_user.id,
+        email=new_user.email,
+        full_name=new_user.full_name,
+        status=new_user.status,
+        created_at=new_user.created_at,
+        last_login_at=new_user.last_login_at,
+        roles=serialized,
+    )
 
 
 @university_admin_router.post(
@@ -453,3 +546,87 @@ async def update_staff_status(
             detail=error or "Failed to update staff account status.",
         )
     return MessageResponse(message=f"Staff account status updated to {payload.status}.")
+
+
+@university_admin_router.patch(
+    "/staff/{user_id}",
+    response_model=StaffMemberResponse,
+    dependencies=[Depends(require_csrf)],
+    summary="Update Staff Member Identity, Role, Scope, or Credentials",
+)
+async def update_staff_member(
+    user_id: uuid.UUID,
+    payload: UpdateStaffUserRequest,
+    request: Request,
+    university_id: uuid.UUID | None = Query(default=None),
+    admin_context: tuple[User, uuid.UUID | None] = Depends(require_university_admin),
+    db: AsyncSession = Depends(get_db_session),
+) -> StaffMemberResponse:
+    """University Admin modifies staff full name, email within authorized domain, role, department, status, or resets password."""
+    user, _ = admin_context
+    target_univ_id = _resolve_target_university(admin_context, university_id)
+    updated_user, error = await role_service.update_staff_user(
+        db=db,
+        actor_user=user,
+        target_user_id=user_id,
+        university_id=target_univ_id,
+        full_name=payload.full_name,
+        email=payload.email,
+        role_code=payload.role_code,
+        institution_id=payload.institution_id,
+        department_id=payload.department_id,
+        status=payload.status,
+        password=payload.password,
+        request=request,
+    )
+    if not updated_user or error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error or "Failed to update staff member.",
+        )
+    assignments = await role_service.get_user_role_assignments(db, updated_user.id, active_only=False)
+    univ_assignments = [a for a in assignments if a.university_id == target_univ_id]
+    active_univ = [a for a in univ_assignments if a.is_active]
+    display_assignments = active_univ if active_univ else univ_assignments
+    serialized = role_service.serialize_role_assignments(display_assignments)
+    return StaffMemberResponse(
+        id=updated_user.id,
+        email=updated_user.email,
+        full_name=updated_user.full_name,
+        status=updated_user.status,
+        created_at=updated_user.created_at,
+        last_login_at=updated_user.last_login_at,
+        roles=serialized,
+    )
+
+
+@university_admin_router.delete(
+    "/staff/{user_id}",
+    response_model=MessageResponse,
+    dependencies=[Depends(require_csrf)],
+    summary="Delete / Detach Staff Member from University",
+)
+async def delete_staff_member(
+    user_id: uuid.UUID,
+    request: Request,
+    university_id: uuid.UUID | None = Query(default=None),
+    admin_context: tuple[User, uuid.UUID | None] = Depends(require_university_admin),
+    db: AsyncSession = Depends(get_db_session),
+) -> MessageResponse:
+    """University Admin deletes or removes staff member from this university scope."""
+    user, _ = admin_context
+    target_univ_id = _resolve_target_university(admin_context, university_id)
+    success, error = await role_service.delete_staff_user(
+        db=db,
+        actor_user=user,
+        target_user_id=user_id,
+        university_id=target_univ_id,
+        request=request,
+    )
+    if not success or error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error or "Failed to delete staff member.",
+        )
+    return MessageResponse(message="Staff member successfully removed from university.")
+

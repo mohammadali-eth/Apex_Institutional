@@ -8,6 +8,7 @@ from app.models.enums import (
     RoleCode,
     UserStatus,
 )
+from app.models.domain_mapping import DomainRoleMapping
 from app.models.organization import Department, Institution, University
 from app.models.role import Role, StaffInvitation, UserRoleAssignment
 from app.models.session import UserSession
@@ -26,6 +27,7 @@ __all__ = [
     "Role",
     "UserRoleAssignment",
     "StaffInvitation",
+    "DomainRoleMapping",
     "UserStatus",
     "RoleCode",
     "OrganizationStatus",

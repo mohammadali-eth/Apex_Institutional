@@ -32,6 +32,15 @@ import {
   School,
   ShieldAlert,
   GraduationCap,
+  UserPlus,
+  Eye,
+  EyeOff,
+  Key,
+  Pencil,
+  AlertTriangle,
+  UserCheck,
+  UserX,
+  X,
 } from 'lucide-react';
 
 export default function UniversityAdminPortalPage() {
@@ -54,8 +63,22 @@ export default function UniversityAdminPortalPage() {
   const [staff, setStaff] = useState<StaffMemberResponse[]>([]);
   const [invitations, setInvitations] = useState<StaffInvitationResponse[]>([]);
   const [delegableRoles, setDelegableRoles] = useState<RoleResponse[]>([]);
+  const [authorizedDomains, setAuthorizedDomains] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'staff' | 'invitations' | 'campuses'>('staff');
+
+  // Direct Staff Provisioning state
+  const [provisionModalOpen, setProvisionModalOpen] = useState(false);
+  const [provisionForm, setProvisionForm] = useState({
+    email: '',
+    password: '',
+    full_name: '',
+    role_code: 'FACULTY_QUESTION_SETTER',
+    institution_id: '',
+    department_id: '',
+  });
+  const [showProvisionPassword, setShowProvisionPassword] = useState(false);
+  const [submittingProvision, setSubmittingProvision] = useState(false);
 
   // Modals state
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
@@ -73,17 +96,39 @@ export default function UniversityAdminPortalPage() {
   const [submittingInst, setSubmittingInst] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [staffStatusFilter, setStaffStatusFilter] = useState<'all' | 'active' | 'suspended'>('all');
+
+  // Edit Staff Modal state
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingStaff, setEditingStaff] = useState<StaffMemberResponse | null>(null);
+  const [editForm, setEditForm] = useState({
+    full_name: '',
+    email: '',
+    role_code: 'FACULTY_QUESTION_SETTER',
+    institution_id: '',
+    department_id: '',
+    status: 'active',
+    password: '',
+  });
+  const [showEditPassword, setShowEditPassword] = useState(false);
+  const [submittingEdit, setSubmittingEdit] = useState(false);
+
+  // Delete Staff Modal state
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deletingStaff, setDeletingStaff] = useState<StaffMemberResponse | null>(null);
+  const [submittingDelete, setSubmittingDelete] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      const [univRes, instRes, deptRes, staffRes, inviteRes, rolesRes] = await Promise.allSettled([
+      const [univRes, instRes, deptRes, staffRes, inviteRes, rolesRes, domainsRes] = await Promise.allSettled([
         universityAdminService.getAssignedOrganization(),
         universityAdminService.listInstitutions(),
         universityAdminService.listDepartments(),
         universityAdminService.listStaff(),
         universityAdminService.listInvitations(),
         universityAdminService.listDelegableRoles(),
+        universityAdminService.listAuthorizedDomains(),
       ]);
 
       if (univRes.status === 'fulfilled') setUniversity(univRes.value);
@@ -92,6 +137,7 @@ export default function UniversityAdminPortalPage() {
       if (staffRes.status === 'fulfilled') setStaff(staffRes.value);
       if (inviteRes.status === 'fulfilled') setInvitations(inviteRes.value);
       if (rolesRes.status === 'fulfilled') setDelegableRoles(rolesRes.value);
+      if (domainsRes.status === 'fulfilled') setAuthorizedDomains(domainsRes.value);
     } catch {
       showToast('Error', 'Failed to synchronize university management data', 'error');
     } finally {
@@ -124,6 +170,66 @@ export default function UniversityAdminPortalPage() {
       </div>
     );
   }
+
+  const generateStrongPassword = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%^&*';
+    let pwd = 'Pass#';
+    for (let i = 0; i < 9; i++) {
+      pwd += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    pwd += '!9A';
+    setProvisionForm((prev) => ({ ...prev, password: pwd }));
+    setShowProvisionPassword(true);
+  };
+
+  const handleProvisionStaff = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmedEmail = provisionForm.email.trim();
+    if (!trimmedEmail || !provisionForm.password || !provisionForm.role_code || !provisionForm.full_name.trim()) {
+      showToast('Validation Error', 'Full name, email, password, and role are required', 'warning');
+      return;
+    }
+    if (provisionForm.password.length < 8) {
+      showToast('Validation Error', 'Password must be at least 8 characters long', 'warning');
+      return;
+    }
+    if (provisionForm.role_code === 'DEPARTMENT_ADMIN' && !provisionForm.department_id) {
+      showToast('Validation Error', 'Department is required for Department Admin (HOD) role', 'warning');
+      return;
+    }
+
+    try {
+      setSubmittingProvision(true);
+      await universityAdminService.provisionStaffUser({
+        email: trimmedEmail,
+        password: provisionForm.password,
+        full_name: provisionForm.full_name.trim(),
+        role_code: provisionForm.role_code,
+        institution_id: provisionForm.institution_id || undefined,
+        department_id: provisionForm.department_id || undefined,
+      });
+      showToast(
+        'Staff Account Provisioned',
+        `Account for ${trimmedEmail} provisioned with role ${provisionForm.role_code}.`,
+        'success'
+      );
+      setProvisionModalOpen(false);
+      setProvisionForm({
+        email: '',
+        password: '',
+        full_name: '',
+        role_code: 'FACULTY_QUESTION_SETTER',
+        institution_id: '',
+        department_id: '',
+      });
+      loadData();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to provision staff member';
+      showToast('Provisioning Error', msg, 'error');
+    } finally {
+      setSubmittingProvision(false);
+    }
+  };
 
   const handleInviteStaff = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -182,16 +288,115 @@ export default function UniversityAdminPortalPage() {
 
   const handleToggleStaffStatus = async (user: StaffMemberResponse) => {
     try {
-      await universityAdminService.updateStaffStatus(user.id, !user.is_active);
+      const isCurrentlyActive = user.status === 'active' || user.is_active === true;
+      await universityAdminService.updateStaffStatus(user.id, !isCurrentlyActive);
       showToast(
         'Staff Status Updated',
-        `${user.email} is now ${!user.is_active ? 'active' : 'suspended'}.`,
+        `${user.email} is now ${!isCurrentlyActive ? 'active' : 'suspended'}.`,
         'success'
       );
       loadData();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Update failed';
       showToast('Error', msg, 'error');
+    }
+  };
+
+  const handleOpenEditModal = (s: StaffMemberResponse) => {
+    setEditingStaff(s);
+    const primaryRole = (s.roles || s.role_assignments || [])[0];
+    const isActive = s.status === 'active' || s.is_active === true;
+    setEditForm({
+      full_name: s.full_name || '',
+      email: s.email || '',
+      role_code: primaryRole?.role_code || 'FACULTY_QUESTION_SETTER',
+      institution_id: primaryRole?.institution_id || '',
+      department_id: primaryRole?.department_id || '',
+      status: isActive ? 'active' : 'disabled',
+      password: '',
+    });
+    setShowEditPassword(false);
+    setEditModalOpen(true);
+  };
+
+  const generateEditStrongPassword = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%^&*';
+    let pwd = 'Pass#';
+    for (let i = 0; i < 9; i++) {
+      pwd += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    pwd += '!9A';
+    setEditForm((prev) => ({ ...prev, password: pwd }));
+    setShowEditPassword(true);
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStaff) return;
+    const trimmedEmail = editForm.email.trim();
+    if (!trimmedEmail || !editForm.full_name.trim()) {
+      showToast('Validation Error', 'Full name and email are required', 'warning');
+      return;
+    }
+    if (editForm.password && editForm.password.length < 8) {
+      showToast('Validation Error', 'Password must be at least 8 characters long', 'warning');
+      return;
+    }
+    if (editForm.role_code === 'DEPARTMENT_ADMIN' && !editForm.department_id) {
+      showToast('Validation Error', 'Department is required for Department Admin (HOD) role', 'warning');
+      return;
+    }
+
+    try {
+      setSubmittingEdit(true);
+      await universityAdminService.updateStaffUser(editingStaff.id, {
+        full_name: editForm.full_name.trim(),
+        email: trimmedEmail,
+        role_code: editForm.role_code,
+        institution_id: editForm.institution_id || undefined,
+        department_id: editForm.department_id || undefined,
+        status: editForm.status,
+        password: editForm.password.trim() || undefined,
+      });
+      showToast('User Updated', `Staff details for ${trimmedEmail} have been updated.`, 'success');
+      setEditModalOpen(false);
+      setEditingStaff(null);
+      loadData();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to update staff user';
+      showToast('Update Failed', msg, 'error');
+    } finally {
+      setSubmittingEdit(false);
+    }
+  };
+
+  const handleOpenDeleteModal = (s: StaffMemberResponse) => {
+    if (backendUser && (backendUser.id === s.id || backendUser.email === s.email)) {
+      showToast('Restricted Action', 'You cannot delete your own administrative account', 'warning');
+      return;
+    }
+    setDeletingStaff(s);
+    setDeleteModalOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deletingStaff) return;
+    try {
+      setSubmittingDelete(true);
+      await universityAdminService.deleteStaffUser(deletingStaff.id);
+      showToast(
+        'User Removed',
+        `${deletingStaff.full_name || deletingStaff.email} removed from university.`,
+        'success'
+      );
+      setDeleteModalOpen(false);
+      setDeletingStaff(null);
+      loadData();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to delete user';
+      showToast('Delete Failed', msg, 'error');
+    } finally {
+      setSubmittingDelete(false);
     }
   };
 
@@ -219,18 +424,26 @@ export default function UniversityAdminPortalPage() {
     }
   };
 
-  const filteredStaff = staff.filter(
-    (s) =>
-      s.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (s.full_name && s.full_name.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  const activeStaffCount = (staff || []).filter((s) => s.status === 'active' || s.is_active === true).length;
+  const suspendedStaffCount = (staff || []).length - activeStaffCount;
 
-  const filteredInvitations = invitations.filter(
+  const filteredStaff = (staff || []).filter((s) => {
+    const isActive = s.status === 'active' || s.is_active === true;
+    if (staffStatusFilter === 'active' && !isActive) return false;
+    if (staffStatusFilter === 'suspended' && isActive) return false;
+    return (
+      (s.email && s.email.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (s.username && s.username.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (s.full_name && s.full_name.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
+  });
+
+  const filteredInvitations = (invitations || []).filter(
     (i) =>
-      i.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (i.email && i.email.toLowerCase().includes(searchQuery.toLowerCase())) ||
       (i.full_name && i.full_name.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      i.role.name.toLowerCase().includes(searchQuery.toLowerCase())
+      (i.role?.name && i.role.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (i.role?.code && i.role.code.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   return (
@@ -260,11 +473,18 @@ export default function UniversityAdminPortalPage() {
               <span>Refresh</span>
             </button>
             <button
-              onClick={() => setInviteModalOpen(true)}
+              onClick={() => setProvisionModalOpen(true)}
               className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-brand-primary hover:bg-brand-primary-hover text-white text-xs font-bold shadow-lg shadow-brand-primary/20 transition"
             >
+              <UserPlus className="w-4 h-4" />
+              <span>Provision User</span>
+            </button>
+            <button
+              onClick={() => setInviteModalOpen(true)}
+              className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold backdrop-blur-md transition border border-white/10"
+            >
               <Mail className="w-4 h-4" />
-              <span>Invite Staff</span>
+              <span>Invite Link</span>
             </button>
           </div>
         </div>
@@ -274,9 +494,19 @@ export default function UniversityAdminPortalPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm flex items-center justify-between">
           <div>
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Staff</span>
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total University Users</span>
             <div className="text-2xl font-black text-slate-800 mt-1">{staff.length}</div>
-            <span className="text-[11px] text-emerald-600 font-semibold">Active Identities</span>
+            <div className="flex items-center space-x-2 mt-1.5">
+              <span className="inline-flex items-center text-[11px] font-semibold text-emerald-600">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5"></span>
+                {activeStaffCount} Active
+              </span>
+              <span className="text-slate-300 text-xs">•</span>
+              <span className="inline-flex items-center text-[11px] font-semibold text-rose-600">
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-400 mr-1.5"></span>
+                {suspendedStaffCount} Suspended
+              </span>
+            </div>
           </div>
           <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
             <Users className="w-6 h-6" />
@@ -359,24 +589,75 @@ export default function UniversityAdminPortalPage() {
       {/* Tab 1: Staff Directory */}
       {activeTab === 'staff' && (
         <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="relative flex-1 max-w-sm">
-              <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search staff by name or email..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-brand-primary"
-              />
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 flex-1 max-w-xl">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search staff by name or email..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-brand-primary"
+                />
+              </div>
+
+              {/* Status Filter Buttons */}
+              <div className="inline-flex rounded-xl bg-slate-100 p-0.5 border border-slate-200 text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => setStaffStatusFilter('all')}
+                  className={`px-3 py-1.5 rounded-lg transition ${
+                    staffStatusFilter === 'all'
+                      ? 'bg-white text-slate-900 shadow-xs'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  All ({staff.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStaffStatusFilter('active')}
+                  className={`px-3 py-1.5 rounded-lg transition flex items-center space-x-1 ${
+                    staffStatusFilter === 'active'
+                      ? 'bg-white text-emerald-700 shadow-xs'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                  <span>Active ({activeStaffCount})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStaffStatusFilter('suspended')}
+                  className={`px-3 py-1.5 rounded-lg transition flex items-center space-x-1 ${
+                    staffStatusFilter === 'suspended'
+                      ? 'bg-white text-rose-700 shadow-xs'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                  <span>Suspended ({suspendedStaffCount})</span>
+                </button>
+              </div>
             </div>
-            <button
-              onClick={() => setInviteModalOpen(true)}
-              className="inline-flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-brand-primary text-white text-xs font-bold hover:bg-brand-primary-hover shadow-md transition"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Invite New Staff</span>
-            </button>
+
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setProvisionModalOpen(true)}
+                className="inline-flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-brand-primary text-white text-xs font-bold hover:bg-brand-primary-hover shadow-md transition"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>Provision User</span>
+              </button>
+              <button
+                onClick={() => setInviteModalOpen(true)}
+                className="inline-flex items-center space-x-2 px-3 py-2 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold hover:bg-slate-200 transition"
+              >
+                <Mail className="w-3.5 h-3.5" />
+                <span>Invite Link</span>
+              </button>
+            </div>
           </div>
 
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -394,53 +675,96 @@ export default function UniversityAdminPortalPage() {
                   {filteredStaff.length === 0 ? (
                     <tr>
                       <td colSpan={4} className="py-8 text-center text-slate-400 font-medium">
-                        {loading ? 'Loading staff records...' : 'No staff members assigned.'}
+                        {loading ? 'Loading staff records...' : 'No staff members match the criteria.'}
                       </td>
                     </tr>
                   ) : (
-                    filteredStaff.map((s) => (
-                      <tr key={s.id} className="hover:bg-slate-50/60 transition">
-                        <td className="py-3 px-4">
-                          <div className="font-bold text-slate-900 text-sm">
-                            {s.full_name || s.username}
-                          </div>
-                          <div className="text-slate-500 font-mono text-[11px]">{s.email}</div>
-                        </td>
-                        <td className="py-3 px-4">
-                          <div className="flex flex-wrap gap-1.5">
-                            {s.role_assignments.map((r) => (
-                              <span
-                                key={r.id}
-                                className="inline-flex items-center px-2 py-0.5 rounded-lg text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200"
+                    filteredStaff.map((s) => {
+                      const isActive = s.status === 'active' || s.is_active === true;
+                      const staffRoles = s.roles || s.role_assignments || [];
+                      const isSelf = backendUser && (backendUser.id === s.id || backendUser.email === s.email);
+
+                      return (
+                        <tr key={s.id} className="hover:bg-slate-50/60 transition">
+                          <td className="py-3 px-4">
+                            <div className="font-bold text-slate-900 text-sm flex items-center space-x-2">
+                              <span>{s.full_name || s.username || s.email.split('@')[0]}</span>
+                              {isSelf && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                                  You
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-slate-500 font-mono text-[11px]">{s.email}</div>
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="flex flex-wrap gap-1.5">
+                              {staffRoles.length === 0 ? (
+                                <span className="text-slate-400 text-[10px]">No roles</span>
+                              ) : (
+                                staffRoles.map((r) => (
+                                  <span
+                                    key={r.id || r.role_code}
+                                    className="inline-flex items-center px-2 py-0.5 rounded-lg text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200"
+                                  >
+                                    {r.role_code || r.role_name}
+                                  </span>
+                                ))
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                              }`}
+                            >
+                              {isActive ? 'Active' : 'Suspended'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <div className="inline-flex items-center justify-end space-x-1.5">
+                              {/* Edit Button */}
+                              <button
+                                onClick={() => handleOpenEditModal(s)}
+                                title="Edit user details, roles, or reset password"
+                                className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 transition"
                               >
-                                {r.role_code}
-                              </span>
-                            ))}
-                          </div>
-                        </td>
-                        <td className="py-3 px-4">
-                          <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                              s.is_active ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
-                            }`}
-                          >
-                            {s.is_active ? 'Active' : 'Suspended'}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-right">
-                          <button
-                            onClick={() => handleToggleStaffStatus(s)}
-                            className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
-                              s.is_active
-                                ? 'bg-rose-50 text-rose-700 hover:bg-rose-100'
-                                : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                            }`}
-                          >
-                            {s.is_active ? 'Suspend' : 'Reactivate'}
-                          </button>
-                        </td>
-                      </tr>
-                    ))
+                                <Pencil className="w-3.5 h-3.5 text-slate-500" />
+                                <span>Edit</span>
+                              </button>
+
+                              {/* Suspend / Reactivate Button */}
+                              <button
+                                onClick={() => handleToggleStaffStatus(s)}
+                                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition ${
+                                  isActive
+                                    ? 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+                                    : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                                }`}
+                              >
+                                {isActive ? 'Suspend' : 'Reactivate'}
+                              </button>
+
+                              {/* Delete Button */}
+                              <button
+                                onClick={() => handleOpenDeleteModal(s)}
+                                disabled={Boolean(isSelf)}
+                                title={isSelf ? 'Cannot delete your own account' : 'Remove user from university'}
+                                className={`inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition ${
+                                  isSelf
+                                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed opacity-50'
+                                    : 'bg-rose-50 text-rose-700 hover:bg-rose-100'
+                                }`}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span>Delete</span>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
@@ -500,7 +824,7 @@ export default function UniversityAdminPortalPage() {
                         </td>
                         <td className="py-3 px-4">
                           <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-[10px] font-bold bg-brand-primary-light text-brand-primary">
-                            {inv.role.name}
+                            {inv.role?.name || inv.role?.code || 'Staff'}
                           </span>
                         </td>
                         <td className="py-3 px-4">
@@ -517,7 +841,7 @@ export default function UniversityAdminPortalPage() {
                           </span>
                         </td>
                         <td className="py-3 px-4 text-slate-500 font-mono text-[11px]">
-                          {new Date(inv.expires_at).toLocaleDateString()}
+                          {inv.expires_at ? new Date(inv.expires_at).toLocaleDateString() : 'N/A'}
                         </td>
                         <td className="py-3 px-4 text-right space-x-2">
                           {inv.status === 'PENDING' && (
@@ -610,6 +934,197 @@ export default function UniversityAdminPortalPage() {
                 ))
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Provision Staff User */}
+      {provisionModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 animate-fadeIn my-8">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-9 h-9 rounded-xl bg-brand-primary/10 text-brand-primary flex items-center justify-center">
+                  <UserPlus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Provision Staff User Account</h3>
+                  <p className="text-xs text-slate-500">
+                    Directly create an account with custom email, password, and authorized role.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Allowed Domains Badge Box */}
+            <div className="p-3 my-3 bg-emerald-50/70 border border-emerald-200/60 rounded-xl">
+              <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider block mb-1">
+                Authorized Domains for this University:
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {authorizedDomains.length === 0 ? (
+                  <span className="text-xs text-emerald-700">Loading authorized domains...</span>
+                ) : (
+                  authorizedDomains.map((dom) => (
+                    <span
+                      key={dom}
+                      className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-mono font-bold bg-white text-emerald-700 border border-emerald-300 shadow-2xs"
+                    >
+                      @{dom}
+                    </span>
+                  ))
+                )}
+              </div>
+              <p className="text-[10px] text-emerald-600/90 mt-1">
+                The username and password are not fixed — you specify them directly. The domain is verified against your authorized domains above.
+              </p>
+            </div>
+
+            <form onSubmit={handleProvisionStaff} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  Full Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Dr. Rajesh Sharma"
+                  value={provisionForm.full_name}
+                  onChange={(e) => setProvisionForm({ ...provisionForm, full_name: e.target.value })}
+                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-brand-primary"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  Staff Email Address
+                </label>
+                <input
+                  type="email"
+                  required
+                  placeholder={`e.g. rsharma@${authorizedDomains[0] || 'bca.hod.in'}`}
+                  value={provisionForm.email}
+                  onChange={(e) => setProvisionForm({ ...provisionForm, email: e.target.value })}
+                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-mono focus:bg-white focus:ring-2 focus:ring-brand-primary"
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-slate-700 uppercase">
+                    Initial Password
+                  </label>
+                  <button
+                    type="button"
+                    onClick={generateStrongPassword}
+                    className="text-[11px] font-bold text-brand-primary hover:underline flex items-center space-x-1"
+                  >
+                    <Key className="w-3 h-3" />
+                    <span>Generate Strong Password</span>
+                  </button>
+                </div>
+                <div className="relative">
+                  <input
+                    type={showProvisionPassword ? 'text' : 'password'}
+                    required
+                    placeholder="Enter custom password (min 8 chars)"
+                    value={provisionForm.password}
+                    onChange={(e) => setProvisionForm({ ...provisionForm, password: e.target.value })}
+                    className="w-full pl-3.5 pr-10 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-mono focus:bg-white focus:ring-2 focus:ring-brand-primary"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowProvisionPassword(!showProvisionPassword)}
+                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600"
+                  >
+                    {showProvisionPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  Delegated Role
+                </label>
+                <select
+                  required
+                  value={provisionForm.role_code}
+                  onChange={(e) => setProvisionForm({ ...provisionForm, role_code: e.target.value })}
+                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-brand-primary font-medium"
+                >
+                  {delegableRoles.map((r) => (
+                    <option key={r.id} value={r.code}>
+                      {r.name} ({r.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    Campus (Optional)
+                  </label>
+                  <select
+                    value={provisionForm.institution_id}
+                    onChange={(e) => setProvisionForm({ ...provisionForm, institution_id: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs focus:bg-white focus:ring-2 focus:ring-brand-primary font-medium"
+                  >
+                    <option value="">-- All Campuses --</option>
+                    {institutions.map((i) => (
+                      <option key={i.id} value={i.id}>
+                        {i.name} ({i.code})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    Department {provisionForm.role_code === 'DEPARTMENT_ADMIN' && <span className="text-rose-500">*</span>}
+                  </label>
+                  <select
+                    value={provisionForm.department_id}
+                    onChange={(e) => setProvisionForm({ ...provisionForm, department_id: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs focus:bg-white focus:ring-2 focus:ring-brand-primary font-medium"
+                  >
+                    <option value="">-- Select Department --</option>
+                    {departments.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name} ({d.code})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end space-x-3 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setProvisionModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingProvision}
+                  className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-brand-primary hover:bg-brand-primary-hover shadow-md disabled:opacity-50 transition flex items-center space-x-2"
+                >
+                  {submittingProvision ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Provisioning Account...</span>
+                    </>
+                  ) : (
+                    <>
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                      <span>Provision User</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -746,6 +1261,278 @@ export default function UniversityAdminPortalPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Edit Staff User */}
+      {editModalOpen && editingStaff && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 animate-fadeIn my-8">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-9 h-9 rounded-xl bg-brand-primary/10 text-brand-primary flex items-center justify-center">
+                  <Pencil className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Edit Academic Staff Member</h3>
+                  <p className="text-xs text-slate-500">
+                    Modify profile details, reassign role &amp; scope, or reset password.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditModalOpen(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Allowed Domains Badge Box */}
+            <div className="p-3 my-3 bg-emerald-50/70 border border-emerald-200/60 rounded-xl">
+              <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider block mb-1">
+                Authorized Domains for this University:
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {authorizedDomains.length === 0 ? (
+                  <span className="text-xs text-emerald-700">Loading authorized domains...</span>
+                ) : (
+                  authorizedDomains.map((dom) => (
+                    <span
+                      key={dom}
+                      className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-mono font-bold bg-white text-emerald-700 border border-emerald-300 shadow-2xs"
+                    >
+                      @{dom}
+                    </span>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Full Name</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Dr. Rajesh Sharma"
+                  value={editForm.full_name}
+                  onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })}
+                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-brand-primary"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Staff Email Address</label>
+                <input
+                  type="email"
+                  required
+                  placeholder="e.g. rsharma@bca.hod.in"
+                  value={editForm.email}
+                  onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-mono focus:bg-white focus:ring-2 focus:ring-brand-primary"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Delegated Role</label>
+                  <select
+                    required
+                    value={editForm.role_code}
+                    onChange={(e) => setEditForm({ ...editForm, role_code: e.target.value })}
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-brand-primary font-medium"
+                  >
+                    {delegableRoles.map((r) => (
+                      <option key={r.id} value={r.code}>
+                        {r.name} ({r.code})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Account Status</label>
+                  <select
+                    value={editForm.status}
+                    onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-brand-primary font-medium"
+                  >
+                    <option value="active">Active (Access Allowed)</option>
+                    <option value="disabled">Suspended (Access Blocked)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Campus (Optional)</label>
+                  <select
+                    value={editForm.institution_id}
+                    onChange={(e) => setEditForm({ ...editForm, institution_id: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs focus:bg-white focus:ring-2 focus:ring-brand-primary font-medium"
+                  >
+                    <option value="">-- All Campuses --</option>
+                    {institutions.map((i) => (
+                      <option key={i.id} value={i.id}>
+                        {i.name} ({i.code})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    Department {editForm.role_code === 'DEPARTMENT_ADMIN' && <span className="text-rose-500">*</span>}
+                  </label>
+                  <select
+                    value={editForm.department_id}
+                    onChange={(e) => setEditForm({ ...editForm, department_id: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs focus:bg-white focus:ring-2 focus:ring-brand-primary font-medium"
+                  >
+                    <option value="">-- Select Department --</option>
+                    {departments.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name} ({d.code})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Reset Password Section */}
+              <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/60 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase">
+                      Reset Password (Optional)
+                    </label>
+                    <p className="text-[11px] text-slate-500">Leave blank to keep existing password</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={generateEditStrongPassword}
+                    className="text-[11px] font-bold text-brand-primary hover:underline flex items-center space-x-1"
+                  >
+                    <Key className="w-3 h-3" />
+                    <span>Generate Strong Password</span>
+                  </button>
+                </div>
+                <div className="relative">
+                  <input
+                    type={showEditPassword ? 'text' : 'password'}
+                    placeholder="Enter new password (min 8 chars) or leave empty"
+                    value={editForm.password}
+                    onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
+                    className="w-full pl-3.5 pr-10 py-2 bg-white border border-slate-300 rounded-xl text-sm font-mono focus:ring-2 focus:ring-brand-primary"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowEditPassword(!showEditPassword)}
+                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600"
+                  >
+                    {showEditPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end space-x-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingEdit}
+                  className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-brand-primary hover:bg-brand-primary-hover shadow-md disabled:opacity-50 transition flex items-center space-x-2"
+                >
+                  {submittingEdit ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Saving Changes...</span>
+                    </>
+                  ) : (
+                    <>
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                      <span>Save Changes</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Delete Staff Member Confirmation */}
+      {deleteModalOpen && deletingStaff && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 animate-fadeIn">
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center mb-4">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+
+            <h3 className="text-lg font-bold text-slate-900">Remove Staff Member?</h3>
+            <p className="text-xs text-slate-500 mt-1">
+              Are you sure you want to remove this user from <span className="font-bold text-slate-700">{university?.name}</span>?
+            </p>
+
+            <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 my-4 space-y-1">
+              <div className="font-bold text-slate-900 text-sm">
+                {deletingStaff.full_name || deletingStaff.username || deletingStaff.email}
+              </div>
+              <div className="text-xs font-mono text-slate-500">{deletingStaff.email}</div>
+              <div className="flex flex-wrap gap-1 pt-1.5">
+                {(deletingStaff.roles || deletingStaff.role_assignments || []).map((r) => (
+                  <span
+                    key={r.id || r.role_code}
+                    className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-slate-200 text-slate-700"
+                  >
+                    {r.role_code || r.role_name}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="p-3 bg-amber-50 border border-amber-200/80 rounded-xl text-[11px] text-amber-800 space-y-1 mb-5">
+              <span className="font-bold block">Security Notice:</span>
+              <p>
+                This action will instantly terminate all active sessions and revoke permissions for this user.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end space-x-3">
+              <button
+                type="button"
+                onClick={() => setDeleteModalOpen(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={submittingDelete}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 shadow-md shadow-rose-600/20 disabled:opacity-50 transition flex items-center space-x-1.5"
+              >
+                {submittingDelete ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Removing...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Confirm Delete</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

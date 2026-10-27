@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 from app.models.enums import InvitationStatus, RoleCode, UserStatus
 
@@ -47,6 +47,18 @@ class ProvisionUniversityAdminRequest(BaseModel):
     full_name: str = Field(min_length=2, max_length=255)
     university_id: uuid.UUID
     password: str = Field(min_length=8, max_length=128)
+
+
+class CreateStaffUserRequest(BaseModel):
+    """University Admin payload to directly provision a staff member account with credentials and role."""
+
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=128)
+    full_name: str = Field(min_length=2, max_length=255)
+    role_code: RoleCode
+    university_id: uuid.UUID | None = None
+    institution_id: uuid.UUID | None = None
+    department_id: uuid.UUID | None = None
 
 
 class StaffInviteRequest(BaseModel):
@@ -126,7 +138,29 @@ class StaffMemberResponse(BaseModel):
     roles: list[UserRoleAssignmentResponse] = []
 
 
+class UpdateStaffUserRequest(BaseModel):
+    """Payload to update an existing staff user's identity, role, scope, or credentials."""
+
+    full_name: str | None = Field(default=None, min_length=2, max_length=255)
+    email: EmailStr | None = None
+    role_code: RoleCode | None = None
+    institution_id: uuid.UUID | None = None
+    department_id: uuid.UUID | None = None
+    status: UserStatus | None = None
+    password: str | None = Field(default=None, min_length=8, max_length=128)
+
+
 class UpdateAccountStatusRequest(BaseModel):
     """Administrative payload to toggle user account status."""
 
-    status: UserStatus
+    status: UserStatus | None = None
+    is_active: bool | None = None
+
+    @model_validator(mode="after")
+    def validate_status_or_active(self) -> "UpdateAccountStatusRequest":
+        if self.status is None and self.is_active is not None:
+            self.status = UserStatus.ACTIVE if self.is_active else UserStatus.DISABLED
+        elif self.status is None and self.is_active is None:
+            raise ValueError("Either 'status' or 'is_active' must be provided.")
+        return self
+

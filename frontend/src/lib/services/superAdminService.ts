@@ -93,11 +93,49 @@ export interface AuditEventItem {
   metadata?: Record<string, unknown> | null;
 }
 
+export interface DomainMappingItem {
+  id: string;
+  domain_pattern: string;
+  role_id: string;
+  role_code?: string | null;
+  role_name?: string | null;
+  university_id?: string | null;
+  university_name?: string | null;
+  institution_id?: string | null;
+  institution_name?: string | null;
+  department_id?: string | null;
+  department_name?: string | null;
+  is_active: boolean;
+  description?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DomainMappingCreateInput {
+  domain_pattern: string;
+  role_id: string;
+  university_id?: string | null;
+  institution_id?: string | null;
+  department_id?: string | null;
+  is_active?: boolean;
+  description?: string | null;
+}
+
+export interface DomainMappingUpdateInput {
+  role_id?: string;
+  university_id?: string | null;
+  institution_id?: string | null;
+  department_id?: string | null;
+  is_active?: boolean;
+  description?: string | null;
+}
+
 export type UniversityResponse = UniversityItem;
 export type InstitutionResponse = InstitutionItem;
 export type DepartmentResponse = DepartmentItem;
 export type RoleResponse = RoleItem;
 export type UniversityAdminUserResponse = UniversityAdminItem;
+export type DomainMappingResponse = DomainMappingItem;
 export type PlatformStatsResponse = PlatformStats;
 export type AuditEventResponse = AuditEventItem;
 
@@ -318,6 +356,63 @@ class SuperAdminService {
   ): Promise<UniversityItem> {
     const norm = status.toLowerCase() as 'active' | 'suspended' | 'inactive';
     return this.updateUniversity(universityId, { status: norm });
+  }
+
+  async listRoles(): Promise<RoleItem[]> {
+    const res = await this.fetchWithAuth(`${this.baseUrl}/super-admin/roles`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error?.message || err.detail || 'Failed to list roles');
+    }
+    return res.json();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Domain-Based Access Control Mappings
+  // ---------------------------------------------------------------------------
+  async listDomainMappings(): Promise<DomainMappingItem[]> {
+    const res = await this.fetchWithAuth(`${this.baseUrl}/super-admin/domain-mappings`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error?.message || err.detail || 'Failed to list domain mappings');
+    }
+    return res.json();
+  }
+
+  async createDomainMapping(data: DomainMappingCreateInput): Promise<DomainMappingItem> {
+    const res = await this.fetchWithAuth(`${this.baseUrl}/super-admin/domain-mappings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error?.message || err.detail || 'Failed to create domain mapping');
+    }
+    return res.json();
+  }
+
+  async updateDomainMapping(id: string, data: DomainMappingUpdateInput): Promise<DomainMappingItem> {
+    const res = await this.fetchWithAuth(`${this.baseUrl}/super-admin/domain-mappings/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error?.message || err.detail || 'Failed to update domain mapping');
+    }
+    return res.json();
+  }
+
+  async deleteDomainMapping(id: string): Promise<void> {
+    const res = await this.fetchWithAuth(`${this.baseUrl}/super-admin/domain-mappings/${id}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error?.message || err.detail || 'Failed to delete domain mapping');
+    }
   }
 }
 

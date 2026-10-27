@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 
 import pytest
 from app.core.security import hash_password
+from app.models.domain_mapping import DomainRoleMapping
 from app.models.enums import OrganizationStatus, RoleCode, UserStatus
 from app.models.organization import University
 from app.models.role import UserRoleAssignment
@@ -195,3 +196,397 @@ async def test_university_admin_staff_lifecycle(
         headers=headers,
     )
     assert revoke_res.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_university_admin_list_authorized_domains(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """University Admin can retrieve active authorized domain patterns for their university."""
+    univ, admin_user, raw_token = await setup_university_and_admin(db_session)
+    async_client.cookies.set("qpms_session", raw_token)
+
+    fqs_role = await role_service.get_role_by_code(db_session, RoleCode.FACULTY_QUESTION_SETTER)
+    assert fqs_role is not None
+
+    mapping1 = DomainRoleMapping(
+        domain_pattern="state.edu",
+        role_id=fqs_role.id,
+        university_id=univ.id,
+        is_active=True,
+    )
+    mapping2 = DomainRoleMapping(
+        domain_pattern="cs.state.edu",
+        role_id=fqs_role.id,
+        university_id=univ.id,
+        is_active=True,
+    )
+    db_session.add_all([mapping1, mapping2])
+    await db_session.flush()
+
+    res = await async_client.get("/api/v1/university-admin/domains")
+    assert res.status_code == 200
+    domains = res.json()
+    assert "state.edu" in domains
+    assert "cs.state.edu" in domains
+
+
+@pytest.mark.asyncio
+async def test_university_admin_provision_staff_success_and_login(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """University Admin provisions staff with custom email and password within authorized domain; user can log in."""
+    univ, admin_user, raw_token = await setup_university_and_admin(db_session)
+    async_client.cookies.set("qpms_session", raw_token)
+
+    # Configure domain mapping for state.edu
+    fqs_role = await role_service.get_role_by_code(db_session, RoleCode.FACULTY_QUESTION_SETTER)
+    assert fqs_role is not None
+    mapping = DomainRoleMapping(
+        domain_pattern="state.edu",
+        role_id=fqs_role.id,
+        university_id=univ.id,
+        is_active=True,
+    )
+    db_session.add(mapping)
+    await db_session.flush()
+
+    csrf_res = await async_client.get("/api/v1/auth/csrf")
+    headers = {"X-CSRF-Token": csrf_res.json()["csrf_token"]}
+
+    # Custom email (arbitrary prefix) and custom password chosen by admin
+    custom_email = "custom.prof.sharma@state.edu"
+    custom_password = "Prof#SecurePassphrase2026!"
+
+    prov_res = await async_client.post(
+        "/api/v1/university-admin/staff",
+        json={
+            "email": custom_email,
+            "password": custom_password,
+            "full_name": "Prof Sharma",
+            "role_code": "FACULTY_QUESTION_SETTER",
+            "university_id": str(univ.id),
+        },
+        headers=headers,
+    )
+    assert prov_res.status_code == 201
+    prov_data = prov_res.json()
+    assert prov_data["email"] == custom_email
+    assert prov_data["full_name"] == "Prof Sharma"
+    assert any(r["role_code"] == "FACULTY_QUESTION_SETTER" for r in prov_data["roles"])
+
+    # Now verify the newly provisioned staff member can immediately log in
+    async_client.cookies.clear()
+    login_csrf_res = await async_client.get("/api/v1/auth/csrf")
+    login_headers = {"X-CSRF-Token": login_csrf_res.json()["csrf_token"]}
+
+    login_res = await async_client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": custom_email,
+            "password": custom_password,
+        },
+        headers=login_headers,
+    )
+    assert login_res.status_code == 200
+    login_data = login_res.json()
+    assert login_data["email"] == custom_email
+    assert login_data["active_role"] == "FACULTY_QUESTION_SETTER"
+
+
+@pytest.mark.asyncio
+async def test_university_admin_provision_staff_unauthorized_domain_fails(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """University Admin cannot provision staff with an email from an unauthorized domain ('only fix domain')."""
+    univ, admin_user, raw_token = await setup_university_and_admin(db_session)
+    async_client.cookies.set("qpms_session", raw_token)
+
+    # Configure domain mapping only for state.edu
+    fqs_role = await role_service.get_role_by_code(db_session, RoleCode.FACULTY_QUESTION_SETTER)
+    assert fqs_role is not None
+    mapping = DomainRoleMapping(
+        domain_pattern="state.edu",
+        role_id=fqs_role.id,
+        university_id=univ.id,
+        is_active=True,
+    )
+    db_session.add(mapping)
+    await db_session.flush()
+
+    csrf_res = await async_client.get("/api/v1/auth/csrf")
+    headers = {"X-CSRF-Token": csrf_res.json()["csrf_token"]}
+
+    # Try provisioning with unauthorized domain @gmail.com
+    res = await async_client.post(
+        "/api/v1/university-admin/staff",
+        json={
+            "email": "hacker@gmail.com",
+            "password": "Valid#Password2026!",
+            "full_name": "Unauthorized User",
+            "role_code": "FACULTY_QUESTION_SETTER",
+            "university_id": str(univ.id),
+        },
+        headers=headers,
+    )
+    assert res.status_code == 400
+    assert "not authorized for this university" in res.json()["error"]["message"]
+
+
+@pytest.mark.asyncio
+async def test_university_admin_provision_staff_weak_password_fails(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """University Admin cannot set passwords that violate NIST policy."""
+    univ, admin_user, raw_token = await setup_university_and_admin(db_session)
+    async_client.cookies.set("qpms_session", raw_token)
+
+    fqs_role = await role_service.get_role_by_code(db_session, RoleCode.FACULTY_QUESTION_SETTER)
+    assert fqs_role is not None
+    mapping = DomainRoleMapping(
+        domain_pattern="state.edu",
+        role_id=fqs_role.id,
+        university_id=univ.id,
+        is_active=True,
+    )
+    db_session.add(mapping)
+    await db_session.flush()
+
+    csrf_res = await async_client.get("/api/v1/auth/csrf")
+    headers = {"X-CSRF-Token": csrf_res.json()["csrf_token"]}
+
+    # 1. Pydantic schema validation rejects passwords < 8 chars
+    res_short = await async_client.post(
+        "/api/v1/university-admin/staff",
+        json={
+            "email": "teacher1@state.edu",
+            "password": "short",
+            "full_name": "Teacher One",
+            "role_code": "FACULTY_QUESTION_SETTER",
+            "university_id": str(univ.id),
+        },
+        headers=headers,
+    )
+    assert res_short.status_code == 422
+
+    # 2. NIST SP 800-63B policy check rejects easily guessable passwords
+    res_guessable = await async_client.post(
+        "/api/v1/university-admin/staff",
+        json={
+            "email": "teacher2@state.edu",
+            "password": "password123456",
+            "full_name": "Teacher Two",
+            "role_code": "FACULTY_QUESTION_SETTER",
+            "university_id": str(univ.id),
+        },
+        headers=headers,
+    )
+    assert res_guessable.status_code == 400
+    assert "too common or easily guessable" in res_guessable.json()["error"]["message"]
+
+
+@pytest.mark.asyncio
+async def test_university_admin_update_staff_success(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """University Admin can edit staff member name, role, status, and reset their password."""
+    univ, admin_user, raw_token = await setup_university_and_admin(db_session)
+    async_client.cookies.set("qpms_session", raw_token)
+
+    fqs_role = await role_service.get_role_by_code(db_session, RoleCode.FACULTY_QUESTION_SETTER)
+    dept_role = await role_service.get_role_by_code(db_session, RoleCode.DEPARTMENT_ADMIN)
+    assert fqs_role is not None and dept_role is not None
+
+    mapping = DomainRoleMapping(
+        domain_pattern="state.edu",
+        role_id=fqs_role.id,
+        university_id=univ.id,
+        is_active=True,
+    )
+    db_session.add(mapping)
+    await db_session.flush()
+
+    csrf_res = await async_client.get("/api/v1/auth/csrf")
+    headers = {"X-CSRF-Token": csrf_res.json()["csrf_token"]}
+
+    # Provision initial staff
+    initial_email = "staff.initial@state.edu"
+    initial_pass = "Initial#Password2026!"
+    prov_res = await async_client.post(
+        "/api/v1/university-admin/staff",
+        json={
+            "email": initial_email,
+            "password": initial_pass,
+            "full_name": "Initial Name",
+            "role_code": "FACULTY_QUESTION_SETTER",
+            "university_id": str(univ.id),
+        },
+        headers=headers,
+    )
+    assert prov_res.status_code == 201
+    target_user_id = prov_res.json()["id"]
+
+    # Now edit staff: change name, status to disabled, and new password
+    new_email = "staff.updated@state.edu"
+    new_pass = "Updated#SecurePassword2026!"
+    patch_res = await async_client.patch(
+        f"/api/v1/university-admin/staff/{target_user_id}",
+        json={
+            "full_name": "Updated Name",
+            "email": new_email,
+            "role_code": "FACULTY_QUESTION_SETTER",
+            "status": "disabled",
+            "password": new_pass,
+        },
+        headers=headers,
+    )
+    assert patch_res.status_code == 200
+    patch_data = patch_res.json()
+    assert patch_data["full_name"] == "Updated Name"
+    assert patch_data["email"] == new_email
+    assert patch_data["status"] == "disabled"
+
+    # Reactivate the user
+    reactivate_res = await async_client.patch(
+        f"/api/v1/university-admin/staff/{target_user_id}",
+        json={
+            "status": "active",
+        },
+        headers=headers,
+    )
+    assert reactivate_res.status_code == 200
+    assert reactivate_res.json()["status"] == "active"
+
+    # Verify user can log in with new email and new password
+    async_client.cookies.clear()
+    login_csrf_res = await async_client.get("/api/v1/auth/csrf")
+    login_headers = {"X-CSRF-Token": login_csrf_res.json()["csrf_token"]}
+
+    login_res = await async_client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": new_email,
+            "password": new_pass,
+        },
+        headers=login_headers,
+    )
+    assert login_res.status_code == 200
+    assert login_res.json()["email"] == new_email
+
+
+@pytest.mark.asyncio
+async def test_university_admin_update_staff_domain_validation(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """Updating email to an unauthorized domain fails with 400."""
+    univ, admin_user, raw_token = await setup_university_and_admin(db_session)
+    async_client.cookies.set("qpms_session", raw_token)
+
+    fqs_role = await role_service.get_role_by_code(db_session, RoleCode.FACULTY_QUESTION_SETTER)
+    assert fqs_role is not None
+    mapping = DomainRoleMapping(
+        domain_pattern="state.edu",
+        role_id=fqs_role.id,
+        university_id=univ.id,
+        is_active=True,
+    )
+    db_session.add(mapping)
+    await db_session.flush()
+
+    csrf_res = await async_client.get("/api/v1/auth/csrf")
+    headers = {"X-CSRF-Token": csrf_res.json()["csrf_token"]}
+
+    prov_res = await async_client.post(
+        "/api/v1/university-admin/staff",
+        json={
+            "email": "teacher.domain@state.edu",
+            "password": "Valid#Password2026!",
+            "full_name": "Teacher Domain",
+            "role_code": "FACULTY_QUESTION_SETTER",
+            "university_id": str(univ.id),
+        },
+        headers=headers,
+    )
+    assert prov_res.status_code == 201
+    target_user_id = prov_res.json()["id"]
+
+    # Try changing email to unauthorized domain
+    bad_res = await async_client.patch(
+        f"/api/v1/university-admin/staff/{target_user_id}",
+        json={
+            "email": "teacher.domain@unauthorized.com",
+        },
+        headers=headers,
+    )
+    assert bad_res.status_code == 400
+    assert "not authorized for this university" in bad_res.json()["error"]["message"]
+
+
+@pytest.mark.asyncio
+async def test_university_admin_delete_staff_success_and_self_delete_guard(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """University admin can delete staff member; self-deletion is strictly blocked."""
+    univ, admin_user, raw_token = await setup_university_and_admin(db_session)
+    async_client.cookies.set("qpms_session", raw_token)
+
+    fqs_role = await role_service.get_role_by_code(db_session, RoleCode.FACULTY_QUESTION_SETTER)
+    assert fqs_role is not None
+    mapping = DomainRoleMapping(
+        domain_pattern="state.edu",
+        role_id=fqs_role.id,
+        university_id=univ.id,
+        is_active=True,
+    )
+    db_session.add(mapping)
+    await db_session.flush()
+
+    csrf_res = await async_client.get("/api/v1/auth/csrf")
+    headers = {"X-CSRF-Token": csrf_res.json()["csrf_token"]}
+
+    # 1. Provision target user
+    prov_res = await async_client.post(
+        "/api/v1/university-admin/staff",
+        json={
+            "email": "delete.me@state.edu",
+            "password": "Valid#Password2026!",
+            "full_name": "Delete Target",
+            "role_code": "FACULTY_QUESTION_SETTER",
+            "university_id": str(univ.id),
+        },
+        headers=headers,
+    )
+    assert prov_res.status_code == 201
+    target_user_id = prov_res.json()["id"]
+
+    # 2. Delete target user
+    del_res = await async_client.delete(
+        f"/api/v1/university-admin/staff/{target_user_id}",
+        headers=headers,
+    )
+    assert del_res.status_code == 200
+    assert "successfully removed" in del_res.json()["message"]
+
+    # Confirm user is deleted from university staff list
+    list_res = await async_client.get("/api/v1/university-admin/staff")
+    assert list_res.status_code == 200
+    staff_ids = [s["id"] for s in list_res.json()]
+    assert target_user_id not in staff_ids
+
+    # 3. Attempt self-deletion by University Admin -> must be rejected
+    self_del_res = await async_client.delete(
+        f"/api/v1/university-admin/staff/{admin_user.id}",
+        headers=headers,
+    )
+    assert self_del_res.status_code == 400
+    assert "You cannot delete your own administrative account" in self_del_res.json()["error"]["message"]
+
+
+

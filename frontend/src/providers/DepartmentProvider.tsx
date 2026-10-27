@@ -49,12 +49,19 @@ export const DepartmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       return;
     }
 
-    // University Admin or Institution Admin
-    if (currentUser.role === 'university_admin' || currentUser.role === 'institution_admin') {
+    // Roles that do not require department assignment
+    if (
+      currentUser.role === 'university_admin' ||
+      currentUser.role === 'institution_admin' ||
+      currentUser.role === 'super_admin' ||
+      currentUser.role === 'student' ||
+      currentUser.role === 'viewer' ||
+      currentUser.role === 'guest'
+    ) {
       const defaultDept = mockDepartments[0];
       setCurrentDepartment(defaultDept);
       const nextState = loadDemoState();
-      nextState.activeDepartmentId = defaultDept.id;
+      nextState.activeDepartmentId = defaultDept?.id || null;
       saveDemoState(nextState);
       setStatus('resolved');
       return;

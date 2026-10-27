@@ -77,3 +77,7 @@ class AuditEventType(enum.StrEnum):
     ROLE_REVOKED = "role_revoked"
     ORGANIZATIONAL_SCOPE_UPDATED = "organizational_scope_updated"
     ADMIN_ACCESS_DENIED = "admin_access_denied"
+    DOMAIN_MAPPING_CREATED = "domain_mapping_created"
+    DOMAIN_MAPPING_UPDATED = "domain_mapping_updated"
+    DOMAIN_MAPPING_DELETED = "domain_mapping_deleted"
+    USER_REGISTERED = "user_registered"

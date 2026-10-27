@@ -257,6 +257,25 @@ class OrganizationService:
         departments = result.scalars().all()
         return [DepartmentResponse.model_validate(d) for d in departments]
 
+    async def list_university_departments(
+        self,
+        db: AsyncSession,
+        university_id: uuid.UUID,
+        institution_id: uuid.UUID | None = None,
+    ) -> list[DepartmentResponse]:
+        """List academic departments under a university, optionally filtered by institution."""
+        stmt = (
+            select(Department)
+            .join(Institution, Department.institution_id == Institution.id)
+            .where(Institution.university_id == university_id)
+        )
+        if institution_id:
+            stmt = stmt.where(Department.institution_id == institution_id)
+        stmt = stmt.order_by(Department.name.asc())
+        result = await db.execute(stmt)
+        departments = result.scalars().all()
+        return [DepartmentResponse.model_validate(d) for d in departments]
+
     async def create_department(
         self,
         db: AsyncSession,

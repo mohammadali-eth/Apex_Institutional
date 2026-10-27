@@ -29,6 +29,7 @@ export default function DashboardLayout({
   const activeNav = React.useMemo(() => {
     if (!pathname) return 'dashboard';
     const segment = pathname.split('/').filter(Boolean)[0] || 'dashboard';
+    if (segment === 'super-admin') return 'admin';
     return segment;
   }, [pathname]);
 

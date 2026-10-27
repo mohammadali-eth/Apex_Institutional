@@ -16,11 +16,15 @@ import {
 export interface StaffMemberResponse {
   id: string;
   email: string;
-  username: string;
+  username?: string;
   full_name?: string | null;
-  is_active: boolean;
-  is_verified: boolean;
-  role_assignments: UserRoleAssignmentResponse[];
+  status?: string;
+  is_active?: boolean;
+  is_verified?: boolean;
+  roles?: UserRoleAssignmentResponse[];
+  role_assignments?: UserRoleAssignmentResponse[];
+  created_at?: string;
+  last_login_at?: string | null;
 }
 
 export interface StaffInvitationResponse {
@@ -40,6 +44,25 @@ export interface InviteStaffRequest {
   role_code: string;
   institution_id?: string;
   department_id?: string;
+}
+
+export interface CreateStaffUserPayload {
+  email: string;
+  password: string;
+  full_name: string;
+  role_code: string;
+  institution_id?: string;
+  department_id?: string;
+}
+
+export interface UpdateStaffUserPayload {
+  full_name?: string;
+  email?: string;
+  role_code?: string;
+  institution_id?: string;
+  department_id?: string;
+  status?: string;
+  password?: string;
 }
 
 export interface AssignRoleRequest {
@@ -143,6 +166,28 @@ class UniversityAdminService {
     return res.json();
   }
 
+  async listAuthorizedDomains(): Promise<string[]> {
+    const res = await this.fetchWithAuth(`${this.baseUrl}/university-admin/domains`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error?.message || 'Failed to list authorized domains');
+    }
+    return res.json();
+  }
+
+  async provisionStaffUser(data: CreateStaffUserPayload): Promise<StaffMemberResponse> {
+    const res = await this.fetchWithAuth(`${this.baseUrl}/university-admin/staff`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error?.message || err.detail || 'Failed to provision staff member');
+    }
+    return res.json();
+  }
+
   async inviteStaff(data: InviteStaffRequest): Promise<StaffInvitationResponse> {
     const res = await this.fetchWithAuth(`${this.baseUrl}/university-admin/staff/invite`, {
       method: 'POST',
@@ -218,11 +263,35 @@ class UniversityAdminService {
     const res = await this.fetchWithAuth(`${this.baseUrl}/university-admin/staff/${userId}/status`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ is_active: isActive }),
+      body: JSON.stringify({ is_active: isActive, status: isActive ? 'active' : 'disabled' }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error(err.error?.message || 'Failed to update staff status');
+      throw new Error(err.error?.message || err.detail || 'Failed to update staff status');
+    }
+    return res.json();
+  }
+
+  async updateStaffUser(userId: string, data: UpdateStaffUserPayload): Promise<StaffMemberResponse> {
+    const res = await this.fetchWithAuth(`${this.baseUrl}/university-admin/staff/${userId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error?.message || err.detail || 'Failed to update staff member');
+    }
+    return res.json();
+  }
+
+  async deleteStaffUser(userId: string): Promise<{ message: string }> {
+    const res = await this.fetchWithAuth(`${this.baseUrl}/university-admin/staff/${userId}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error?.message || err.detail || 'Failed to delete staff member');
     }
     return res.json();
   }

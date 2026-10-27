@@ -102,3 +102,37 @@ async def require_university_admin(
             detail="Access denied. University Administrator privileges required.",
         )
     return user, authorized_univ
+
+
+async def check_user_department_access(
+    db: AsyncSession,
+    user: User,
+    department_id: uuid.UUID,
+) -> bool:
+    """Validate whether user has authorization for a specific department."""
+    from sqlalchemy import select
+    from app.models.organization import Department, Institution
+    from app.services.role_service import role_service
+
+    # 1. Super Admin has access across all departments
+    if await role_service.is_super_admin(db, user.id):
+        return True
+
+    # 2. Check if user holds active assignment for this specific department
+    user_assignments = await role_service.get_user_role_assignments(db, user.id, active_only=True)
+    if any(a.department_id == department_id for a in user_assignments):
+        return True
+
+    # 3. University Admin has access to all departments in their assigned university
+    univ_id = await role_service.get_authorized_university_id(db, user.id)
+    if univ_id:
+        dept_univ_stmt = (
+            select(Institution.university_id)
+            .join(Department, Department.institution_id == Institution.id)
+            .where(Department.id == department_id)
+        )
+        dept_univ_id = (await db.execute(dept_univ_stmt)).scalar_one_or_none()
+        if dept_univ_id == univ_id:
+            return True
+
+    return False

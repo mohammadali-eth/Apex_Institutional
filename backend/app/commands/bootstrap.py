@@ -11,8 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.core.config import settings
 from app.core.security import hash_password, normalize_email, validate_password_policy
+from app.models.domain_mapping import DomainRoleMapping
 from app.models.enums import AuditEventType, OrganizationStatus, RoleCode, UserStatus
-from app.models.organization import University
+from app.models.organization import Department, Institution, University
 from app.models.role import UserRoleAssignment
 from app.models.user import User
 from app.services.audit_service import audit_service
@@ -318,16 +319,351 @@ async def _provision_super_admin_in_session(
     return True
 
 
+# ------------------------------------------------------------------------------
+# Domain-Based Access & Scoped Department Seeding
+# ------------------------------------------------------------------------------
+async def seed_domain_access_system(session: AsyncSession) -> None:
+    """Seed sample organizational hierarchy, domain mappings, and verified accounts."""
+    # 1. Role Catalog
+    await role_service.seed_role_catalog(session)
+
+    # 2. Apex University
+    univ_stmt = select(University).where(University.code == "APEX-UNIV")
+    univ = (await session.execute(univ_stmt)).scalar_one_or_none()
+    if not univ:
+        univ = University(
+            code="APEX-UNIV",
+            name="Apex University Federation",
+            type="Central University",
+            status=OrganizationStatus.ACTIVE,
+            region="Headquarters",
+            address="Central Institutional Campus",
+        )
+        session.add(univ)
+        await session.flush()
+
+    # 3. Apex Institute of Technology
+    inst_stmt = select(Institution).where(Institution.code == "APEX-CAMPUS")
+    inst = (await session.execute(inst_stmt)).scalar_one_or_none()
+    if not inst:
+        inst = Institution(
+            university_id=univ.id,
+            code="APEX-CAMPUS",
+            name="Apex Institute of Technology",
+            type="College",
+            status=OrganizationStatus.ACTIVE,
+            address="Technology Campus Block A",
+            contact_email="director@apex.edu",
+        )
+        session.add(inst)
+        await session.flush()
+
+    # 4. BCA and MCA Departments
+    dept_bca_stmt = select(Department).where(
+        Department.institution_id == inst.id, Department.code == "BCA"
+    )
+    dept_bca = (await session.execute(dept_bca_stmt)).scalar_one_or_none()
+    if not dept_bca:
+        dept_bca = Department(
+            institution_id=inst.id,
+            code="BCA",
+            name="Department of Computer Applications (BCA)",
+            status=OrganizationStatus.ACTIVE,
+        )
+        session.add(dept_bca)
+        await session.flush()
+
+    dept_mca_stmt = select(Department).where(
+        Department.institution_id == inst.id, Department.code == "MCA"
+    )
+    dept_mca = (await session.execute(dept_mca_stmt)).scalar_one_or_none()
+    if not dept_mca:
+        dept_mca = Department(
+            institution_id=inst.id,
+            code="MCA",
+            name="Department of Master of Computer Applications (MCA)",
+            status=OrganizationStatus.ACTIVE,
+        )
+        session.add(dept_mca)
+        await session.flush()
+
+    role_super_admin = await role_service.get_role_by_code(session, RoleCode.SUPER_ADMIN)
+    role_univ_admin = await role_service.get_role_by_code(session, RoleCode.UNIVERSITY_ADMIN)
+    role_dept_admin = await role_service.get_role_by_code(session, RoleCode.DEPARTMENT_ADMIN)
+    role_faculty = await role_service.get_role_by_code(session, RoleCode.FACULTY_QUESTION_SETTER)
+    role_exam_controller = await role_service.get_role_by_code(session, RoleCode.EXAM_CONTROLLER)
+    role_student = await role_service.get_role_by_code(session, RoleCode.STUDENT)
+    assert role_univ_admin and role_dept_admin and role_student
+
+    # 5. Domain Mappings:
+    mappings_data = [
+        {
+            "pattern": "*@superadmin.com",
+            "role_id": role_super_admin.id if role_super_admin else None,
+            "university_id": None,
+            "institution_id": None,
+            "department_id": None,
+            "identity_type": "SUPER_ADMIN",
+            "priority": 10,
+            "desc": "Super Administrator wildcard pattern",
+        },
+        {
+            "pattern": "*@universityadmin.com",
+            "role_id": role_univ_admin.id,
+            "university_id": univ.id,
+            "institution_id": None,
+            "department_id": None,
+            "identity_type": "UNIVERSITY_ADMIN",
+            "priority": 20,
+            "desc": "University Admin wildcard pattern",
+        },
+        {
+            "pattern": "universityadmin.in",
+            "role_id": role_univ_admin.id,
+            "university_id": univ.id,
+            "institution_id": None,
+            "department_id": None,
+            "identity_type": "UNIVERSITY_ADMIN",
+            "priority": 20,
+            "desc": "University Admin domain mapping",
+        },
+        {
+            "pattern": "cs.hod@hod.com",
+            "role_id": role_dept_admin.id,
+            "university_id": univ.id,
+            "institution_id": inst.id,
+            "department_id": dept_bca.id,
+            "identity_type": "HOD",
+            "priority": 5,
+            "desc": "CS HOD exact email and department scope mapping",
+        },
+        {
+            "pattern": "*@hod.com",
+            "role_id": role_dept_admin.id,
+            "university_id": univ.id,
+            "institution_id": inst.id,
+            "department_id": None,
+            "identity_type": "HOD",
+            "priority": 30,
+            "desc": "Department Admin / HOD wildcard pattern",
+        },
+        {
+            "pattern": "bca.hod.in",
+            "role_id": role_dept_admin.id,
+            "university_id": univ.id,
+            "institution_id": inst.id,
+            "department_id": dept_bca.id,
+            "identity_type": "HOD",
+            "priority": 30,
+            "desc": "BCA HOD domain mapping",
+        },
+        {
+            "pattern": "mca.hod.in",
+            "role_id": role_dept_admin.id,
+            "university_id": univ.id,
+            "institution_id": inst.id,
+            "department_id": dept_mca.id,
+            "identity_type": "HOD",
+            "priority": 30,
+            "desc": "MCA HOD domain mapping",
+        },
+        {
+            "pattern": "*@faculty.com",
+            "role_id": role_faculty.id if role_faculty else None,
+            "university_id": univ.id,
+            "institution_id": inst.id,
+            "department_id": dept_bca.id,
+            "identity_type": "FACULTY_QUESTION_SETTER",
+            "priority": 40,
+            "desc": "Faculty Question Setter wildcard pattern",
+        },
+        {
+            "pattern": "*@examcontroller.com",
+            "role_id": role_exam_controller.id if role_exam_controller else None,
+            "university_id": univ.id,
+            "institution_id": inst.id,
+            "department_id": None,
+            "identity_type": "EXAM_CONTROLLER",
+            "priority": 40,
+            "desc": "Exam Controller wildcard pattern",
+        },
+    ]
+
+    for m in mappings_data:
+        if not m["role_id"]:
+            continue
+        map_stmt = select(DomainRoleMapping).where(
+            DomainRoleMapping.domain_pattern == m["pattern"]
+        )
+        existing_map = (await session.execute(map_stmt)).scalar_one_or_none()
+        if not existing_map:
+            dm = DomainRoleMapping(
+                domain_pattern=m["pattern"],
+                role_id=m["role_id"],
+                university_id=m["university_id"],
+                institution_id=m["institution_id"],
+                department_id=m["department_id"],
+                identity_type=m.get("identity_type"),
+                priority=m.get("priority", 100),
+                is_active=True,
+                description=m["desc"],
+            )
+            session.add(dm)
+            logger.info("Configured domain mapping: %s -> role_id %s", m["pattern"], m["role_id"])
+
+    await session.flush()
+
+    # 6. Seed Authoritative User Accounts
+    users_data = [
+        {
+            "email": "apex@superadmin.com",
+            "name": "Apex Super Admin",
+            "password": "ApexDev#2026!",
+            "role_id": role_super_admin.id if role_super_admin else None,
+            "univ_id": None,
+            "inst_id": None,
+            "dept_id": None,
+        },
+        {
+            "email": "admin@universityadmin.com",
+            "name": "University Administrator",
+            "password": "ApexDev#2026!",
+            "role_id": role_univ_admin.id,
+            "univ_id": univ.id,
+            "inst_id": None,
+            "dept_id": None,
+        },
+        {
+            "email": "cs.hod@hod.com",
+            "name": "Computer Science HOD",
+            "password": "ApexDev#2026!",
+            "role_id": role_dept_admin.id,
+            "univ_id": univ.id,
+            "inst_id": inst.id,
+            "dept_id": dept_bca.id,
+        },
+        {
+            "email": "faculty@faculty.com",
+            "name": "Assessment Faculty Member",
+            "password": "ApexDev#2026!",
+            "role_id": role_faculty.id if role_faculty else None,
+            "univ_id": univ.id,
+            "inst_id": inst.id,
+            "dept_id": dept_bca.id,
+        },
+        {
+            "email": "student@gmail.com",
+            "name": "Student User (Gmail)",
+            "password": "ApexDev#2026!",
+            "role_id": role_student.id,
+            "univ_id": univ.id,
+            "inst_id": None,
+            "dept_id": None,
+        },
+        {
+            "email": "student@yahoo.com",
+            "name": "Student User (Yahoo)",
+            "password": "ApexDev#2026!",
+            "role_id": role_student.id,
+            "univ_id": univ.id,
+            "inst_id": None,
+            "dept_id": None,
+        },
+        {
+            "email": "ali@universityadmin.in",
+            "name": "Ali University Admin",
+            "password": "UnivAdmin#Pass2026!",
+            "role_id": role_univ_admin.id,
+            "univ_id": univ.id,
+            "inst_id": None,
+            "dept_id": None,
+        },
+        {
+            "email": "ali@bca.hod.in",
+            "name": "Ali BCA HOD",
+            "password": "BcaHod#Pass2026!",
+            "role_id": role_dept_admin.id,
+            "univ_id": univ.id,
+            "inst_id": inst.id,
+            "dept_id": dept_bca.id,
+        },
+        {
+            "email": "ali@mca.hod.in",
+            "name": "Ali MCA HOD",
+            "password": "McaHod#Pass2026!",
+            "role_id": role_dept_admin.id,
+            "univ_id": univ.id,
+            "inst_id": inst.id,
+            "dept_id": dept_mca.id,
+        },
+        {
+            "email": "student@general.in",
+            "name": "Student Prep User",
+            "password": "Student#Pass2026!",
+            "role_id": role_student.id,
+            "univ_id": univ.id,
+            "inst_id": None,
+            "dept_id": None,
+        },
+    ]
+
+    now = datetime.now(UTC)
+    for u in users_data:
+        if not u["role_id"]:
+            continue
+        normalized = normalize_email(u["email"])
+        u_stmt = select(User).where(User.email == normalized)
+        usr = (await session.execute(u_stmt)).scalar_one_or_none()
+        if not usr:
+            usr = User(
+                email=normalized,
+                full_name=u["name"],
+                password_hash=hash_password(u["password"]),
+                status=UserStatus.ACTIVE,
+                email_verified_at=now,
+                password_changed_at=now,
+            )
+            session.add(usr)
+            await session.flush()
+
+            assign = UserRoleAssignment(
+                user_id=usr.id,
+                role_id=u["role_id"],
+                university_id=u["univ_id"],
+                institution_id=u["inst_id"],
+                department_id=u["dept_id"],
+                is_active=True,
+            )
+            session.add(assign)
+            logger.info("Seeded user account: %s with scoped role", normalized)
+
+    await session.flush()
+    logger.info("Domain-based access system seed completed.")
+
+
+async def run_domain_bootstrap() -> bool:
+    """Run full domain access bootstrap provisioning."""
+    db_url = str(settings.database_url)
+    engine = create_async_engine(db_url, echo=False)
+    session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+    async with session_factory() as db, db.begin():
+        await seed_domain_access_system(db)
+
+    await engine.dispose()
+    return True
+
+
 def main() -> None:
     """CLI entrypoint for manual bootstrap invocation."""
     parser = argparse.ArgumentParser(
-        description="Provision initial University or Super Administrator."
+        description="Provision initial University or Super Administrator, or seed domain mappings."
     )
     parser.add_argument(
         "--role",
-        choices=["university_admin", "super_admin"],
+        choices=["university_admin", "super_admin", "domain_setup"],
         default="university_admin",
-        help="Target administrator role to provision (default: university_admin)",
+        help="Target action/role to provision (default: university_admin)",
     )
     parser.add_argument(
         "--username",
@@ -354,7 +690,9 @@ def main() -> None:
 
     args = parser.parse_args()
     try:
-        if args.role == "university_admin":
+        if args.role == "domain_setup":
+            success = asyncio.run(run_domain_bootstrap())
+        elif args.role == "university_admin":
             success = asyncio.run(
                 run_university_admin_bootstrap(
                     username=args.username,
@@ -381,3 +719,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

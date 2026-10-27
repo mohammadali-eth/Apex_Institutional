@@ -17,10 +17,12 @@ from app.core.security import (
     verify_dummy_password,
     verify_password,
 )
-from app.models.enums import AuditEventType, UserStatus
+from app.models.enums import AuditEventType, OrganizationStatus, UserStatus
+from app.models.role import UserRoleAssignment
 from app.models.token import EmailVerificationToken, PasswordResetToken
 from app.models.user import User
 from app.services.audit_service import audit_service
+from app.services.domain_service import domain_service
 from app.services.email.service import email_service
 from app.services.session_service import session_service
 
@@ -32,10 +34,10 @@ class AuthService:
         """Query user identity by normalized email or administrative username."""
         normalized = normalize_email(email)
         candidates = [normalized]
-        if normalized == "admin":
-            candidates.append("admin@apex.edu")
-        elif normalized == "admin@apex.edu":
-            candidates.append("admin")
+        if "@" not in normalized:
+            candidates.append(f"{normalized}@apex.edu")
+        elif normalized.endswith("@apex.edu"):
+            candidates.append(normalized.split("@")[0])
 
         stmt = select(User).where(User.email.in_(candidates))
         result = await db.execute(stmt)
@@ -61,7 +63,7 @@ class AuthService:
                 db,
                 event_type=AuditEventType.LOGIN_FAILURE,
                 request=request,
-                details="Invalid credentials",
+                details=f"Invalid credentials - account not found ({email})",
             )
             return None, "Invalid email or password."
 
@@ -88,6 +90,17 @@ class AuthService:
             )
             return None, "Account is locked. Please contact your administrator."
 
+        if user.status == UserStatus.PENDING_VERIFICATION:
+            verify_dummy_password()
+            await audit_service.record_event(
+                db,
+                event_type=AuditEventType.LOGIN_FAILURE,
+                user_id=user.id,
+                request=request,
+                details="Attempted login on pending or unverified account",
+            )
+            return None, "Your account is not currently authorized to access the system."
+
         # Verify password with Argon2id
         if not verify_password(password, user.password_hash):
             await audit_service.record_event(
@@ -99,6 +112,23 @@ class AuthService:
             )
             return None, "Invalid email or password."
 
+        # Validate that each user belongs to active mapped organization or department
+        from app.models.organization import Department, University
+        assign_stmt = select(UserRoleAssignment).where(
+            UserRoleAssignment.user_id == user.id,
+            UserRoleAssignment.is_active == True,  # noqa: E712
+        )
+        active_assignments = (await db.execute(assign_stmt)).scalars().all()
+        for assign in active_assignments:
+            if assign.department_id:
+                dept = (await db.execute(select(Department).where(Department.id == assign.department_id))).scalar_one_or_none()
+                if dept and dept.status != OrganizationStatus.ACTIVE:
+                    return None, "Assigned academic department is inactive or suspended."
+            if assign.university_id:
+                univ = (await db.execute(select(University).where(University.id == assign.university_id))).scalar_one_or_none()
+                if univ and univ.status != OrganizationStatus.ACTIVE:
+                    return None, "Assigned university organization is inactive or suspended."
+
         # Successful authentication
         user.last_login_at = datetime.now(UTC)
         await audit_service.record_event(
@@ -106,6 +136,68 @@ class AuthService:
             event_type=AuditEventType.LOGIN_SUCCESS,
             user_id=user.id,
             request=request,
+        )
+        await db.commit()
+        await db.refresh(user)
+        return user, None
+
+    async def register_user(
+        self,
+        db: AsyncSession,
+        email: str,
+        password: str,
+        full_name: str | None = None,
+        request: Request | None = None,
+    ) -> tuple[User | None, str | None]:
+        """Secure account registration and provisioning following domain access rules."""
+        normalized_email = normalize_email(email)
+        existing = await self.get_user_by_email(db, normalized_email)
+        if existing:
+            return None, "An account with this email address is already registered."
+
+        policy_err = validate_password_policy(password)
+        if policy_err:
+            return None, policy_err
+
+        # Resolve provisioning based on domain mapping
+        prov = await domain_service.resolve_user_provisioning_for_domain(db, normalized_email)
+
+        # Super Admin accounts can NEVER be self-registered or auto-provisioned
+        if prov.get("is_super_admin"):
+            return None, "Super Administrator accounts cannot be self-registered."
+
+        user_status = prov.get("default_status", UserStatus.ACTIVE)
+
+        now = datetime.now(UTC)
+        user = User(
+            email=normalized_email,
+            full_name=full_name or normalized_email.split("@")[0].capitalize(),
+            password_hash=hash_password(password),
+            status=user_status,
+            email_verified_at=now if user_status == UserStatus.ACTIVE else None,
+            password_changed_at=now,
+            last_login_at=now if user_status == UserStatus.ACTIVE else None,
+        )
+        db.add(user)
+        await db.flush()
+
+        assignment = UserRoleAssignment(
+            user_id=user.id,
+            role_id=prov["role_id"],
+            university_id=prov["university_id"],
+            institution_id=prov["institution_id"],
+            department_id=prov["department_id"],
+            is_active=True,
+        )
+        db.add(assignment)
+        await db.flush()
+
+        await audit_service.record_event(
+            db,
+            event_type=AuditEventType.USER_REGISTERED,
+            user_id=user.id,
+            request=request,
+            details=f"User registered with role {prov['role_code']} (status={user_status}, domain_configured={prov.get('is_configured', False)})",
         )
         await db.commit()
         await db.refresh(user)
