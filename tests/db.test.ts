@@ -1,5 +1,5 @@
-import { prisma } from '../src/lib/prisma';
 import {
+  PrismaClient,
   OrganizationStatus,
   UserStatus,
   QuestionType,
@@ -7,6 +7,8 @@ import {
   QuestionStatus,
   PaperStatus,
 } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 async function runDatabaseTests() {
   console.log('====================================================');
