@@ -18,7 +18,7 @@ async function runDatabaseTests() {
   let passedTests = 0;
   let totalTests = 0;
 
-  function assert(condition: boolean, message: string) {
+  function assert(condition: unknown, message: string) {
     totalTests++;
     if (!condition) {
       console.error(`❌ FAILED: ${message}`);
@@ -60,7 +60,7 @@ async function runDatabaseTests() {
     });
     assert(!!univAdmin, 'Development University Admin (admin) exists');
     assert(
-      univAdmin?.roleAssignments.some((r) => r.role.code === 'UNIVERSITY_ADMIN'),
+      !!univAdmin?.roleAssignments.some((r) => r.role.code === 'UNIVERSITY_ADMIN'),
       'University Admin has UNIVERSITY_ADMIN role assigned'
     );
     assert(
