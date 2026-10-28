@@ -1,110 +1,154 @@
-"""FastAPI application entry point."""
-
-from collections.abc import AsyncGenerator
+import os
 from contextlib import asynccontextmanager
-from typing import Any
-
-from fastapi import Depends, FastAPI, status
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.exceptions import RequestValidationError
+from fastapi.encoders import jsonable_encoder
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.api.v1.router import api_v1_router
 from app.core.config import settings
-from app.core.exceptions import register_exception_handlers
-from app.core.logging import logger, setup_logging
-from app.db.health import check_database_health
-from app.db.session import engine, get_db_session
-from app.middleware.request_id import RequestIdMiddleware
+from app.database.session import engine, SessionLocal, Base
+import app.models.models
+from app.database.seed_data import seed_database
+from app.database.migration_ai_generator import run_ai_generator_migrations
+from app.database.migration_dynamic_layout import run_dynamic_layout_migrations
+from app.database.migration_syllabus_grounding import run_syllabus_grounding_migrations
 
+# Routers
+from app.api.v1.auth import router as auth_router
+from app.api.v1.organizations import router as org_router
+from app.api.v1.universities import router as university_router
+from app.api.v1.institutions import router as institution_router
+from app.api.v1.themes import router as theme_router
+from app.api.v1.departments import router as dept_router
+from app.api.v1.academics import router as academic_router
+from app.api.v1.syllabus import router as syllabus_router
+from app.api.v1.questions import router as question_router
+from app.api.v1.question_papers import router as paper_router
+from app.api.v1.dashboard import router as dashboard_router
+from app.api.v1.audit import router as audit_router
+from app.api.v1.users import router as user_router
+from app.api.v1.contact import router as contact_router
+from app.api.v1.student import router as student_router
+from app.api.v1.university_admin import router as university_admin_router
+from app.api.v1.hod import router as hod_router
+from app.api.v1.faculty import router as faculty_router
+from app.api.v1.coordinator import router as coordinator_router
+from app.api.v1.controller import router as controller_router
 
 @asynccontextmanager
-async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
-    """Application startup and graceful shutdown lifecycle."""
-    setup_logging()
-    settings.validate_environment()
-    logger.info(
-        "Initializing %s (v%s) in [%s] mode",
-        settings.app_name,
-        settings.app_version,
-        settings.app_env,
-    )
+async def lifespan(app: FastAPI):
+    # Ensure tables and migrations exist
+    Base.metadata.create_all(bind=engine)
+    run_ai_generator_migrations(engine)
+    run_dynamic_layout_migrations(engine)
+    run_syllabus_grounding_migrations(engine)
+    # Ensure upload directory exists
+    os.makedirs(settings.STORAGE_DIR, exist_ok=True)
+    os.makedirs(os.path.join(settings.STORAGE_DIR, "syllabus"), exist_ok=True)
+    
+    # Auto-seed if database is freshly created
+    db = SessionLocal()
+    try:
+        from app.models.models import User
+        if db.query(User).count() == 0:
+            seed_database(db)
+    finally:
+        db.close()
     yield
-    logger.info("Shutting down database connection engine...")
-    await engine.dispose()
-    logger.info("Application shutdown complete.")
 
+app = FastAPI(
+    title=settings.PROJECT_NAME,
+    version=settings.VERSION,
+    lifespan=lifespan,
+    docs_url="/docs",
+    redoc_url="/redoc"
+)
 
-def create_application() -> FastAPI:
-    """Factory function to build and configure the FastAPI instance."""
-    app = FastAPI(
-        title=settings.app_name,
-        version=settings.app_version,
-        debug=settings.debug,
-        lifespan=lifespan,
-        docs_url="/docs" if not settings.is_production or settings.debug else None,
-        redoc_url="/redoc" if not settings.is_production or settings.debug else None,
-        openapi_url="/openapi.json" if not settings.is_production or settings.debug else None,
-    )
+# CORS Middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-    # 1. Custom Request ID Middleware
-    app.add_middleware(RequestIdMiddleware)
+# Mount static files for downloads/uploads
+os.makedirs(settings.STORAGE_DIR, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=settings.STORAGE_DIR), name="uploads")
 
-    # 2. CORS Middleware
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=settings.cors_origins,
-        allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["*"],
-    )
-
-    # 3. Global Exception Handlers
-    register_exception_handlers(app)
-
-    # 4. Infrastructure Health Endpoints (Non-business)
-    @app.get(
-        "/health",
-        tags=["Infrastructure"],
-        summary="Liveness check",
-        response_model=dict[str, Any],
-    )
-    async def liveness() -> dict[str, Any]:
-        """Verify the service process is alive and responsive."""
-        return {
-            "status": "ok",
-            "service": settings.app_name,
-            "version": settings.app_version,
-            "environment": settings.app_env,
+# Global Exception Handlers for standard format
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "success": False,
+            "message": exc.detail,
+            "detail": exc.detail,
+            "code": f"HTTP_{exc.status_code}"
         }
-
-    @app.get(
-        "/health/ready",
-        tags=["Infrastructure"],
-        summary="Readiness check",
-        response_model=dict[str, Any],
     )
-    async def readiness(session: AsyncSession = Depends(get_db_session)) -> JSONResponse:
-        """Verify database connectivity and external infrastructure readiness."""
-        db_healthy = await check_database_health(session)
-        is_ready = db_healthy
 
-        payload: dict[str, Any] = {
-            "status": "ready" if is_ready else "unhealthy",
-            "components": {
-                "database": "connected" if db_healthy else "disconnected",
-            },
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    first_error = exc.errors()[0] if exc.errors() else {}
+    msg = f"{first_error.get('loc', ['field'])[-1]}: {first_error.get('msg', 'Validation error')}"
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={
+            "success": False,
+            "message": msg,
+            "code": "VALIDATION_ERROR",
+            "details": jsonable_encoder(exc.errors())
         }
+    )
 
-        return JSONResponse(
-            status_code=status.HTTP_200_OK if is_ready else status.HTTP_503_SERVICE_UNAVAILABLE,
-            content=payload,
-        )
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={
+            "success": False,
+            "message": "An internal server error occurred.",
+            "code": "INTERNAL_SERVER_ERROR"
+        }
+    )
 
-    # 5. Versioned API Routes (/api/v1)
-    app.include_router(api_v1_router, prefix=settings.api_v1_prefix)
+# Include Routers
+api_v1 = settings.API_V1_STR
+app.include_router(auth_router, prefix=api_v1)
+app.include_router(org_router, prefix=api_v1)
+app.include_router(university_router, prefix=api_v1)
+app.include_router(institution_router, prefix=api_v1)
+app.include_router(theme_router, prefix=api_v1)
+app.include_router(dept_router, prefix=api_v1)
+app.include_router(academic_router, prefix=api_v1)
+app.include_router(syllabus_router, prefix=api_v1)
+app.include_router(question_router, prefix=api_v1)
+app.include_router(paper_router, prefix=api_v1)
+app.include_router(dashboard_router, prefix=api_v1)
+app.include_router(audit_router, prefix=api_v1)
+app.include_router(user_router, prefix=api_v1)
+app.include_router(contact_router, prefix=api_v1)
+app.include_router(student_router, prefix=api_v1)
+app.include_router(university_admin_router, prefix=api_v1)
+app.include_router(hod_router, prefix=api_v1)
+app.include_router(faculty_router, prefix=api_v1)
+app.include_router(coordinator_router, prefix=api_v1)
+app.include_router(controller_router, prefix=api_v1)
 
-    return app
+@app.get("/health", tags=["Health"])
+def health_check():
+    return {"status": "ok", "service": "QPMS Apex API", "version": settings.VERSION}
 
-
-app = create_application()
+@app.get("/", tags=["Root"])
+def root():
+    return {
+        "message": "University Question Paper Management & Generation System API",
+        "documentation": "/docs",
+        "health": "/health"
+    }

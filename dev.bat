@@ -1,3 +1,0 @@
-@echo off
-echo Starting QPMS Backend and Frontend...
-npm.cmd run dev

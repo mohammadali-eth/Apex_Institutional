@@ -1,1 +1,0 @@
-"""CLI administrative management commands."""

@@ -1,138 +1,137 @@
-import uuid
+from typing import Optional, List, Callable
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy.orm import Session
+from app.database.session import get_db
+from app.core.security import decode_access_token
+from app.core.permissions import RoleEnum, ROLE_PERMISSIONS, PermissionEnum
+from app.models.models import User, Role, Organization
 
-from fastapi import Depends, HTTPException, Request, status
-from sqlalchemy.ext.asyncio import AsyncSession
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+oauth2_optional_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
-from app.core.cookies import get_session_token_from_request
-from app.core.csrf import verify_csrf
-from app.db.session import get_db_session
-from app.models.enums import UserStatus
-from app.models.session import UserSession
-from app.models.user import User
-from app.services.session_service import session_service
+def get_current_user(
+    db: Session = Depends(get_db),
+    token: str = Depends(oauth2_scheme)
+) -> User:
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    payload = decode_access_token(token)
+    if payload is None:
+        raise credentials_exception
+    user_id: str = payload.get("sub")
+    if user_id is None:
+        raise credentials_exception
+    
+    user = db.query(User).filter(User.id == user_id).first()
+    if user is None:
+        raise credentials_exception
+    if not user.is_active:
+        raise HTTPException(status_code=400, detail="Inactive user account")
+    
+    # Enforce University suspension policy on every authenticated request
+    if user.organization_id and user.role_name != RoleEnum.SUPER_ADMIN.value:
+        org = db.query(Organization).filter(Organization.id == user.organization_id).first()
+        if org and not org.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access denied: University '{org.name}' is currently suspended. Please contact platform administration."
+            )
+        if org and org.parent_id:
+            parent_org = db.query(Organization).filter(Organization.id == org.parent_id).first()
+            if parent_org and not parent_org.is_active:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Access denied: Parent University '{parent_org.name}' is currently suspended."
+                )
 
+    return user
 
-def get_current_session_token(request: Request) -> str:
-    """Extract session token from request cookies or raise 401."""
-    token = get_session_token_from_request(request)
+def get_optional_current_user(
+    db: Session = Depends(get_db),
+    token: Optional[str] = Depends(oauth2_optional_scheme)
+) -> Optional[User]:
     if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required. No active session cookie found.",
-        )
-    return token
+        return None
+    payload = decode_access_token(token)
+    if payload is None:
+        return None
+    user_id = payload.get("sub")
+    if not user_id:
+        return None
+    return db.query(User).filter(User.id == user_id, User.is_active == True).first()
 
+def get_user_permissions(user: User) -> List[str]:
+    """Calculate merged effective permissions based on user's roles and database records"""
+    perms = set()
+    # 1. From user's primary role_name enum mapping
+    try:
+        r_enum = RoleEnum(user.role_name)
+        if r_enum in ROLE_PERMISSIONS:
+            for p in ROLE_PERMISSIONS[r_enum]:
+                perms.add(p.value)
+    except Exception:
+        pass
 
-async def get_current_user_and_session(
-    request: Request,
-    db: AsyncSession = Depends(get_db_session),
-) -> tuple[User, UserSession]:
-    """Resolve and validate active user and session from request cookies."""
-    token = get_current_session_token(request)
-    result = await session_service.validate_session(db, token)
-    if not result:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Session has expired or been revoked. Please authenticate again.",
-        )
-    user_session, user = result
-    return user, user_session
+    # 2. From user's linked database roles
+    for role in user.roles:
+        for perm in role.permissions:
+            perms.add(perm.name)
+            
+    # Super admin has all permissions
+    if user.role_name == RoleEnum.SUPER_ADMIN.value:
+        for p in PermissionEnum:
+            perms.add(p.value)
+            
+    return list(perms)
 
+def require_permission(required_permission: str) -> Callable:
+    def permission_checker(current_user: User = Depends(get_current_user)) -> User:
+        user_perms = get_user_permissions(current_user)
+        if required_permission not in user_perms and current_user.role_name != RoleEnum.SUPER_ADMIN.value:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Operation not permitted. Required permission: '{required_permission}'"
+            )
+        return current_user
+    return permission_checker
 
-async def get_current_user(
-    auth_context: tuple[User, UserSession] = Depends(get_current_user_and_session),
-) -> User:
-    """Dependency returning authenticated User."""
-    user, _ = auth_context
-    return user
+def require_roles(allowed_roles: List[str]) -> Callable:
+    def role_checker(current_user: User = Depends(get_current_user)) -> User:
+        if current_user.role_name == RoleEnum.SUPER_ADMIN.value:
+            return current_user
+        if current_user.role_name not in allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access forbidden: insufficient role privileges"
+            )
+        return current_user
+    return role_checker
 
-
-async def get_current_active_user(
-    user: User = Depends(get_current_user),
-) -> User:
-    """Dependency verifying that authenticated user identity is active."""
-    if user.status != UserStatus.ACTIVE:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account is not active.",
-        )
-    return user
-
-
-def require_csrf(request: Request) -> None:
-    """Dependency enforcing CSRF protection on state-changing requests."""
-    verify_csrf(request)
-
-
-async def require_super_admin(
-    user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db_session),
-) -> User:
-    """Dependency enforcing that caller has an active platform-level Super Admin role."""
-    from app.services.role_service import role_service
-
-    is_super = await role_service.is_super_admin(db, user.id)
-    if not is_super:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied. Super Administrator privileges required.",
-        )
-    return user
-
-
-async def require_university_admin(
-    user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db_session),
-) -> tuple[User, uuid.UUID | None]:
-    """Dependency enforcing caller is a University Admin or Super Admin.
-
-    Returns:
-        (user, authorized_university_id) - Note: university_id is None for platform Super Admins.
-    """
-    from app.services.role_service import role_service
-
-    is_super = await role_service.is_super_admin(db, user.id)
-    if is_super:
-        return user, None
-
-    authorized_univ = await role_service.get_authorized_university_id(db, user.id)
-    if not authorized_univ:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied. University Administrator privileges required.",
-        )
-    return user, authorized_univ
-
-
-async def check_user_department_access(
-    db: AsyncSession,
-    user: User,
-    department_id: uuid.UUID,
-) -> bool:
-    """Validate whether user has authorization for a specific department."""
-    from sqlalchemy import select
-    from app.models.organization import Department, Institution
-    from app.services.role_service import role_service
-
-    # 1. Super Admin has access across all departments
-    if await role_service.is_super_admin(db, user.id):
+def check_organization_scope(user: User, organization_id: Optional[str], db: Optional[Session] = None) -> bool:
+    """Enforces tenant isolation rule: A user can only access data within their organization or affiliated institutions"""
+    if not organization_id:
         return True
-
-    # 2. Check if user holds active assignment for this specific department
-    user_assignments = await role_service.get_user_role_assignments(db, user.id, active_only=True)
-    if any(a.department_id == department_id for a in user_assignments):
+    if user.role_name == RoleEnum.SUPER_ADMIN.value:
         return True
-
-    # 3. University Admin has access to all departments in their assigned university
-    univ_id = await role_service.get_authorized_university_id(db, user.id)
-    if univ_id:
-        dept_univ_stmt = (
-            select(Institution.university_id)
-            .join(Department, Department.institution_id == Institution.id)
-            .where(Department.id == department_id)
-        )
-        dept_univ_id = (await db.execute(dept_univ_stmt)).scalar_one_or_none()
-        if dept_univ_id == univ_id:
+    if user.organization_id == organization_id:
+        return True
+    if db and user.role_name == RoleEnum.UNIVERSITY_ADMIN.value and user.organization_id:
+        child = db.query(Organization).filter(
+            Organization.id == organization_id,
+            Organization.parent_id == user.organization_id
+        ).first()
+        if child:
             return True
-
     return False
+
+def check_department_scope(user: User, department_id: Optional[str]) -> bool:
+    """Enforces department isolation rule"""
+    if not department_id:
+        return True
+    if user.role_name in [RoleEnum.SUPER_ADMIN.value, RoleEnum.UNIVERSITY_ADMIN.value]:
+        return True
+    return user.department_id == department_id

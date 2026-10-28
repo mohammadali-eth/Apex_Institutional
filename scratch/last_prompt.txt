@@ -1,0 +1,89 @@
+<USER_REQUEST>
+# MASTER IMPLEMENTATION PROMPT — KSV University Examination Paper Layout Redesign
+
+## Objective
+
+Redesign the **question paper preview, print layout, and PDF export** in my existing Question Paper Management System (QPMS) to closely match the uploaded Kadi Sarva Vishwavidyalaya (KSV) examination paper.
+
+Treat the uploaded image as the primary visual reference. Reproduce its document structure, alignment, typography, question numbering, marks placement, OR alternatives, and formal university examination appearance.
+
+**Important:** This is a layout and rendering enhancement to the existing system. Do not rebuild the application or replace the existing question-generation engine.
+
+## Phase 1 — Audit the Existing Project
+
+Before making changes:
+
+1. Inspect the repository and identify the existing:
+   - Question paper generation workflow.
+   - Paper preview component.
+   - PDF generation and download logic.
+   - Paper templates and styling.
+   - Question, section, marks, and OR-group data models.
+   - Backend API endpoints and persistence logic.
+2. Trace the complete rendering pipeline from generated paper data to browser preview and exported PDF.
+3. Identify why the current output differs from the supplied university paper.
+4. Reuse existing components and dependencies wherever possible.
+5. Implement the changes in the correct frontend and backend files based on the actual repository structure.
+
+Do not create a second paper generator, duplicate PDF implementation, or a separate hardcoded sample template.
+
+## Phase 2 — Reproduce the University Paper Header
+
+Create a clean, centered university examination header based on the reference image.
+
+The header should support these configurable fields:
+
+- University name.
+- Examination name or examination session, if available.
+- Semester.
+- Programme or course name.
+- Subject code.
+- Subject name.
+- Examination date.
+- Examination duration.
+- Maximum marks.
+
+Use a structure similar to the following:
+
+```text
+
+<truncated 8657 bytes>
+ct the actual PDF pages. Do not rely exclusively on unit tests for visual correctness.
+
+## Phase 10 — Acceptance Criteria
+
+The task is complete only when:
+
+- [ ] The paper resembles the uploaded KSV university examination paper.
+- [ ] The university header is centered and professionally formatted.
+- [ ] Candidate number, subject metadata, date, duration, total marks, and instructions are properly aligned.
+- [ ] Main questions and subquestions follow the expected examination style.
+- [ ] Marks appear in the correct positions.
+- [ ] OR alternatives are clearly distinguishable and logically grouped.
+- [ ] A4 page breaks are clean and printable.
+- [ ] Preview and downloaded PDF are consistent.
+- [ ] The design works dynamically for different universities, subjects, and marks.
+- [ ] Existing AI generation, syllabus integration, approval workflow, and question-bank functionality remain intact.
+- [ ] Marks validation remains accurate.
+- [ ] Automated tests pass, and visual PDF verification is completed.
+
+## Final Instructions
+
+Work directly in the existing repository. First audit the current implementation, then make targeted changes, and finally run the relevant tests.
+
+Do not rewrite unrelated pages or change the overall dashboard theme. The university examination paper itself should have a traditional, monochrome print design, even if the surrounding application uses its existing green-and-grey theme.
+
+Do not insert the uploaded reference paper's questions as hardcoded production content. Use it only as a layout reference.
+
+At completion, report:
+1. Files changed.
+2. Components and PDF rendering logic updated.
+3. Pagination and marks-validation changes.
+4. Tests executed and their actual results.
+5. Any remaining differences from the supplied reference.
+
+Do not claim that the redesign or tests are complete unless the changes have actually been implemented and verified.
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-27T19:27:21+05:30.
+</ADDITIONAL_METADATA>

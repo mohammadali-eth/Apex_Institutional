@@ -1,0 +1,73 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: qpms_postgres
+    restart: always
+    environment:
+      POSTGRES_DB: qpms_db
+      POSTGRES_USER: qpms_user
+      POSTGRES_PASSWORD: qpms_secure_pass_2026
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qpms_user -d qpms_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: qpms_backend
+    restart: always
+    environment:
+      DATABASE_URL: postgresql+psycopg2://qpms_user:qpms_secure_pass_2026@postgres:5432/qpms_db
+      SECRET_KEY: apex_super_secret_jwt_key_2026_production_grade_university_qpms
+      ACCESS_TOKEN_EXPIRE_MINUTES: "1440"
+      STORAGE_PROVIDER: local
+      STORAGE_DIR: /app/uploads
+      CORS_ORIGINS: '["http://localhost:3000","http://127.0.0.1:3000","http://localhost:3001","http://127.0.0.1:3001","http://localhost:3002","http://127.0.0.1:3002","http://localhost:8000","http://127.0.0.1:8000"]'
+    ports:
+      - "8000:8000"
+    volumes:
+      - backend_uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000/api/v1
+    container_name: qpms_frontend
+    restart: always
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000/api/v1
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+  admin:
+    build:
+      context: ./admin
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000/api/v1
+    container_name: qpms_admin
+    restart: always
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000/api/v1
+    ports:
+      - "3002:3002"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  backend_uploads:

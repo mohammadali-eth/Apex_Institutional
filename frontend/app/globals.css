@@ -1,0 +1,173 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --primary-color: #82c341;
+  --secondary-color: #45525b;
+  --background-color: #f3f3f3;
+  --font-color: #838383;
+  --title-color: #44535b;
+  --paragraph-color: #676767;
+  --bg-text-color: #dcdcdc;
+  --bg-title-color: #f6f6f7;
+  --white-color: #ffffff;
+  --black-color: #000000;
+  --footer-bg: #eeeeee;
+
+  /* Semantic tokens derived from the existing theme */
+  --surface-color: var(--white-color);
+  --surface-muted: var(--bg-title-color);
+  --border-color: var(--bg-text-color);
+  --heading-color: var(--title-color);
+  --body-text-color: var(--paragraph-color);
+  --muted-text-color: var(--font-color);
+  --sidebar-bg: var(--secondary-color);
+  --sidebar-text: var(--white-color);
+  --sidebar-muted: #dce1e4;
+  --input-bg: var(--white-color);
+  --footer-color: var(--footer-bg);
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+
+  --shadow-sm: 0 1px 3px rgb(0 0 0 / 5%);
+  --shadow-md: 0 4px 12px rgb(0 0 0 / 6%);
+
+  --content-max-width: 1600px;
+}
+
+body {
+  background-color: var(--background-color);
+  color: var(--paragraph-color);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  color: var(--title-color);
+}
+
+/* Custom Unified Button Styles */
+.btn-primary {
+  background-color: var(--primary-color);
+  color: var(--black-color);
+  font-weight: 600;
+  border-radius: var(--radius-md);
+  padding: 0.5rem 1rem;
+  transition: all 0.15s ease-in-out;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+.btn-primary:hover:not(:disabled) {
+  filter: brightness(0.95);
+  box-shadow: var(--shadow-sm);
+}
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background-color: var(--white-color);
+  color: var(--title-color);
+  border: 1px solid var(--bg-text-color);
+  font-weight: 500;
+  border-radius: var(--radius-md);
+  padding: 0.5rem 1rem;
+  transition: all 0.15s ease-in-out;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+.btn-secondary:hover:not(:disabled) {
+  background-color: var(--bg-title-color);
+  border-color: #c5c5c5;
+}
+
+.btn-danger {
+  background-color: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+  font-weight: 500;
+  border-radius: var(--radius-md);
+  padding: 0.5rem 1rem;
+  transition: all 0.15s ease-in-out;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+.btn-danger:hover:not(:disabled) {
+  background-color: #fca5a5;
+  color: #7f1d1d;
+}
+
+/* Custom Unified Input Field Styles */
+.input-theme {
+  background-color: var(--white-color);
+  color: var(--title-color);
+  border: 1px solid var(--bg-text-color);
+  border-radius: var(--radius-md);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  outline: none;
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+.input-theme:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(130, 195, 65, 0.25);
+}
+
+/* Custom Card & Container Surface */
+.card-theme {
+  background-color: var(--white-color);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Custom Print Rules for University Exam Papers */
+@media print {
+  body {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .no-print,
+  aside,
+  header,
+  nav,
+  footer,
+  button,
+  .toast-container {
+    display: none !important;
+  }
+
+  .paper-preview {
+    background: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  .page-break {
+    page-break-after: always;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 1.5cm 1.5cm 1.5cm 1.5cm;
+  }
+}

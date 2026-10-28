@@ -1,112 +1,89 @@
-"""Pydantic schemas for authentication and identity operations."""
-
-import uuid
+from typing import Optional, List
+from pydantic import BaseModel, EmailStr, ConfigDict
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
-
-from app.models.enums import UserStatus
-from app.schemas.role import UserRoleAssignmentResponse
-
-
 class LoginRequest(BaseModel):
-    """User credential login payload."""
-
-    email: str = Field(
-        min_length=3, max_length=255, description="Email address or administrative username"
-    )
-    password: str = Field(min_length=1, max_length=128)
-
-
-class RegisterRequest(BaseModel):
-    """New user account registration payload."""
-
     email: EmailStr
-    password: str = Field(min_length=8, max_length=128)
-    full_name: str | None = Field(default=None, max_length=255)
+    password: str
 
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
+    user: "UserResponse"
 
-class UserProfileSummary(BaseModel):
-    """Safe user profile overview."""
-
-    id: uuid.UUID
-    email: str
-    name: str | None = None
-    full_name: str | None = None
-    status: UserStatus
-
-
-class ScopeItemResponse(BaseModel):
-    """Organizational or departmental scope summary."""
-
-    id: uuid.UUID
+class RoleResponse(BaseModel):
+    id: str
     name: str
-    code: str | None = None
-
-
-class UserResponse(BaseModel):
-    """Safe public representation of user identity with active roles and portal routing."""
+    display_name: str
+    description: Optional[str] = None
+    permissions: List[str] = []
 
     model_config = ConfigDict(from_attributes=True)
 
-    id: uuid.UUID
-    email: str
-    full_name: str | None = None
-    status: UserStatus
-    email_verified_at: datetime | None = None
-    created_at: datetime
-    last_login_at: datetime | None = None
-    roles: list[UserRoleAssignmentResponse] = []
-    active_role: str | None = None
-    portal_route: str = "/workspace"
-    must_change_password: bool = False
+class UserCreate(BaseModel):
+    email: EmailStr
+    password: Optional[str] = None # If None, system generates a secure initial setup token & temp password
+    full_name: str
+    role_name: str = "TEACHER"
+    organization_id: Optional[str] = None
+    department_id: Optional[str] = None
+    must_change_password: Optional[bool] = True
 
-    # Extended Section 20 authoritative attributes
-    user: UserProfileSummary | None = None
-    permissions: list[str] = []
-    organization: ScopeItemResponse | None = None
-    departments: list[ScopeItemResponse] = []
+class UserUpdate(BaseModel):
+    full_name: Optional[str] = None
+    role_name: Optional[str] = None
+    organization_id: Optional[str] = None
+    department_id: Optional[str] = None
+    is_active: Optional[bool] = None
 
+class PasswordChangeRequest(BaseModel):
+    current_password: str
+    new_password: str
 
-class ChangePasswordRequest(BaseModel):
-    """Authenticated password modification request."""
+class CredentialSetupRequest(BaseModel):
+    token: str
+    new_password: str
 
-    current_password: str = Field(min_length=1, max_length=128)
-    new_password: str = Field(min_length=12, max_length=128)
-
+class PublicSignUpRequest(BaseModel):
+    full_name: str
+    email: EmailStr
+    password: str
+    confirm_password: Optional[str] = None
+    terms_accepted: bool
 
 class ForgotPasswordRequest(BaseModel):
-    """Account recovery request payload."""
-
     email: EmailStr
 
+class ForgotPasswordResponse(BaseModel):
+    message: str
+    email_sent: bool
+    delivery_status: str
+    dev_token: Optional[str] = None
 
 class ResetPasswordRequest(BaseModel):
-    """Password reset token consumption payload."""
+    token: str
+    new_password: str
 
-    token: str = Field(min_length=16, max_length=256)
-    new_password: str = Field(min_length=12, max_length=128)
+class UserResponse(BaseModel):
+    id: str
+    email: str
+    full_name: str
+    role_name: str
+    organization_id: Optional[str] = None
+    department_id: Optional[str] = None
+    organization_name: Optional[str] = None
+    department_name: Optional[str] = None
+    is_active: bool
+    must_change_password: bool = False
+    permissions: List[str] = []
+    created_at: datetime
 
+    model_config = ConfigDict(from_attributes=True)
 
-class VerifyEmailRequest(BaseModel):
-    """Email verification token consumption payload."""
+class UserProvisionResponse(UserResponse):
+    temporary_password: Optional[str] = None
+    setup_token: Optional[str] = None
+    setup_url: Optional[str] = None
 
-    token: str = Field(min_length=16, max_length=256)
-
-
-class ResendVerificationRequest(BaseModel):
-    """Request to resend verification email."""
-
-    email: EmailStr
-
-
-class MessageResponse(BaseModel):
-    """Generic message response."""
-
-    message: str
-
-
-class CsrfTokenResponse(BaseModel):
-    """CSRF token issuance response."""
-
-    csrf_token: str
+TokenResponse.model_rebuild()
